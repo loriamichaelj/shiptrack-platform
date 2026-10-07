@@ -71,7 +71,7 @@ Platform publishes its outputs as an **SSM Parameter Store contract** (§6.9). A
 | Random provider | `~> 3.7` | Ephemeral `random_password` |
 | TFLint | Latest + `tflint-ruleset-aws` | |
 | Checkov, Trivy | Latest | IaC scanning |
-| Python | 3.12 | Validation tooling only |
+| Python | 3.12 | Validation tooling only; `uv` with lockfiles |
 | k6 | Latest stable | Load testing |
 | OrbStack, LocalStack | Latest | Local development only (Docker, Kubernetes, AWS API emulation); never a substitute for the checks that run in workflows |
 
@@ -133,29 +133,32 @@ shiptrack-platform/
 │   └── envs/dev/
 │       ├── backend.tf  versions.tf  providers.tf
 │       ├── main.tf  variables.tf  outputs.tf
-│       └── terraform.tfvars      # Non-secret values only
+│       └── terraform.tfvars      # Non-secret, non-identifying values only; org, emails, domain, owner come from repo variables (TF_VAR_*)
 ├── db/
 │   ├── bootstrap.sql             # Roles, schema, grants (psql variables, no literals)
 │   └── RUNBOOK-db-bootstrap.md
-├── validation/
-│   ├── contract/                 # pytest API contract suite (canonical)
-│   ├── loadtest/                 # k6 scenarios + results/
-│   └── simulator/                # Carrier event simulator
-├── runbooks/
-│   ├── cutover.md
-│   └── break-glass-rollback.md
+├── validation/                   # Each package: pyproject.toml + uv.lock
+│   ├── contract/                 # pytest API contract suite (canonical); tests/, results/
+│   ├── simulator/                # Carrier event simulator; installable package so a workflow can ship it as a wheel
+│   └── loadtest/                 # k6 scenarios + results/
 ├── docs/
 │   ├── DESIGN.md                 # This file
 │   ├── ADR.md                    # Decision log
+│   ├── runbooks/
+│   │   ├── cutover.md
+│   │   └── break-glass-rollback.md
 │   └── security/findings-register.md
-├── .github/workflows/
-│   ├── bootstrap-apply.yml
-│   ├── terraform-pr.yml
-│   ├── terraform-apply.yml
-│   ├── drift.yml
-│   └── validation.yml
-├── .tflint.hcl  .checkov.yaml  .pre-commit-config.yaml
-└── README.md
+├── .github/
+│   ├── workflows/
+│   │   ├── bootstrap-apply.yml
+│   │   ├── terraform-pr.yml
+│   │   ├── terraform-apply.yml
+│   │   ├── drift.yml
+│   │   └── validation.yml
+│   ├── dependabot.yml            # github-actions + pip
+│   └── CODEOWNERS                # .github/ and bootstrap/ (R-09)
+├── .tflint.hcl  .checkov.yaml  .pre-commit-config.yaml  .gitleaks.toml  .gitignore
+└── README.md                     # Overview + one-time `gh` commands for branch protection and environments (§6.12)
 ```
 
 ---
@@ -554,7 +557,7 @@ All three repositories are public.
 
 ## 7. Runbooks
 
-**`runbooks/cutover.md`** contains:
+**`docs/runbooks/cutover.md`** contains:
 - The wave plan (summarized here; the detailed per-wave app behavior lives in the modern design §9)
 - Exact PR diffs for each weight step
 - The go/no-go gates below
@@ -571,7 +574,7 @@ All three repositories are public.
 
 Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui/*` together). Wave 2 `default` 10 → 25 → 50 → 100.
 
-**`runbooks/break-glass-rollback.md`**: use when an incident cannot wait for PR review.
+**`docs/runbooks/break-glass-rollback.md`**: use when an incident cannot wait for PR review.
 1. Exact `aws elbv2 describe-rules` / `modify-rule` / `modify-listener` commands to force legacy = 100, modern = 0 for both the track rule and the default action, run by an authorized human with their **own admin role** (listed in `var.breakglass_principal_arns` and the README). Pipeline roles trust GitHub OIDC only and cannot be assumed by humans, by design.
 2. Verification commands.
 3. **Within 24 h**, open a PR setting `var.cutover` to match; `drift.yml` will flag the drift until this is done.
@@ -679,7 +682,7 @@ Phase numbers are otherwise unchanged, and each phase's "Done when" must pass be
 | **P5 Observability + Contract** | `modules/observability` (SNS, alarms, dashboard JSON), `modules/contract` | Every alarm description contains owner/sev/runbook; all §6.9 keys present |
 | **P6 CI/CD** (P6a: `terraform-pr`, `terraform-apply`; P6b: `drift`, `validation`) | 3 Terraform workflows, the §6.12 scrub check, `.pre-commit-config.yaml`, `.tflint.hcl`, `.checkov.yaml` | `actionlint` passes; actions pinned to SHAs |
 | **P7 Validation tooling** | `validation/contract`, `simulator`, `loadtest`, `validation.yml` | `pytest --collect-only` lists every endpoint in the legacy §3.4 table; `k6 inspect` passes |
-| **P8 Runbooks** | `runbooks/cutover.md`, `runbooks/break-glass-rollback.md` | Commands are copy-pasteable with variables only |
+| **P8 Runbooks** | `docs/runbooks/cutover.md`, `docs/runbooks/break-glass-rollback.md` | Commands are copy-pasteable with variables only |
 
 ---
 
