@@ -11,6 +11,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0005 | `seed-role-and-bootstrap-workflow` | Planned |
 | 0006 | `public-repositories` | Planned |
 | 0007 | `dev-branch-and-environment` | Planned |
+| 0008 | `branching-and-environment-protection` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -95,3 +96,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** _to be written when decided_
 
 **Consequences:** _to be written when decided_
+
+## ADR-0008: branching-and-environment-protection
+
+**Status:** Accepted
+
+**Context:** The designs gate everything on pull requests (CI, plans) and on the `dev` environment, but the first plan was to commit straight to `dev`. An environment job's OIDC `sub` carries no branch, so approval alone does not stop other branches from requesting apply roles.
+
+**Decision:** Work happens on short-lived branches off `dev` and merges by pull request into the protected `dev` branch. Environments `dev` and `bootstrap` allow deployments from `dev` only. Role ARNs are stored as secrets so GitHub masks them.
+
+**Consequences:** Every change runs CI and a plan before merge. Direct pushes to `dev` are blocked. The one-time setup in each repo is documented in `bootstrap/README.md`.

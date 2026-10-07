@@ -42,7 +42,7 @@ Platform publishes its outputs as an **SSM Parameter Store contract** (§6.9). A
 ## 2. Scope
 
 ### In scope
-- One-time bootstrap: Terraform state bucket, GitHub OIDC provider, deploy roles, workload permission boundary
+- One-time bootstrap: Terraform state bucket, deploy roles, workload permission boundary (the GitHub OIDC provider and seed role are created by hand, §6.1)
 - Network: VPC, subnets, NAT, VPC endpoints, flow logs, shared security groups
 - KMS keys for data, secrets, and logs
 - RDS PostgreSQL, database credentials, DB bootstrap SQL and runbook
@@ -73,7 +73,7 @@ Platform publishes its outputs as an **SSM Parameter Store contract** (§6.9). A
 | Checkov, Trivy | Latest | IaC scanning |
 | Python | 3.12 | Validation tooling only; `uv` with lockfiles |
 | k6 | Latest stable | Load testing |
-| OrbStack, LocalStack | Latest | Local development only (Docker, Kubernetes, AWS API emulation); never a substitute for the checks that run in workflows |
+| OrbStack, LocalStack | Latest | Local development only (Docker, Kubernetes, AWS API emulation); never a substitute for the checks that run in workflows; LocalStack requires an account and auth token (§14) |
 
 Default region is the `aws_region` variable (default `us-east-1`).
 
@@ -155,7 +155,7 @@ shiptrack-platform/
 │   │   ├── terraform-apply.yml
 │   │   ├── drift.yml
 │   │   └── validation.yml
-│   ├── dependabot.yml            # github-actions + pip
+│   ├── dependabot.yml            # github-actions + uv
 │   └── CODEOWNERS                # .github/ and bootstrap/ (R-09)
 ├── .tflint.hcl  .checkov.yaml  .pre-commit-config.yaml  .gitleaks.toml  .gitignore
 └── README.md                     # Overview + one-time `gh` commands for branch protection and environments (§6.12)
@@ -172,7 +172,8 @@ Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a sta
 **Manual prerequisites (a human, once; documented in `bootstrap/README.md`):**
 1. In the AWS account, create the GitHub OIDC provider (values below).
 2. Create IAM role `shiptrack-bootstrap` with trust `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and `:sub = repo:<org>/shiptrack-platform:environment:bootstrap`. Attach `AdministratorAccess` initially, because bootstrap creates IAM roles, the permission boundary, and KMS keys. Narrowing or retiring it is tracked as risk R-10.
-3. In GitHub, on `shiptrack-platform`: create environment `bootstrap` with required reviewers; protect `dev`; enable "Require approval for all outside collaborators"; set repo variables for the seed role ARN and the region (§6.12).
+3. In GitHub, on **each of the three repos**: create environment `dev` (and `bootstrap` on `shiptrack-platform`) with required reviewers and deployment branches limited to `dev`; protect `dev` so changes arrive by pull request; enable "Require approval for all outside collaborators" (§6.12).
+4. On `shiptrack-platform`, set the seed role ARN as a secret and the region as a variable. After the first bootstrap run, set each repo's role ARNs as **secrets** (GitHub masks them in logs; variables are not masked). `bootstrap/README.md` lists the `gh` commands.
 
 Terraform does **not** manage the OIDC provider or the seed role. It reads the provider with `data "aws_iam_openid_connect_provider"`. Keeping the seed role manual means the pipeline cannot modify its own foundation.
 
@@ -221,8 +222,8 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
 |---|---|---|
 | `shiptrack-platform-plan` | `…/shiptrack-platform:pull_request` **or** `…:ref:refs/heads/dev` (drift + validation workflows) | `ReadOnlyAccess`; state read; `PutObject`/`DeleteObject` on `platform/*.tflock`; KMS decrypt on the state key; `secretsmanager:GetSecretValue` on the test-routing token (§6.6) and, because refreshing `aws_secretsmanager_secret_version` reads the value, on `shiptrack/dev/db/*`, plus `kms:Decrypt` on `shiptrack-secrets` conditioned on `kms:ViaService` **[VERIFY: whether the provider still calls `GetSecretValue` on refresh when write-only arguments are used; drop the DB-secret grants if not]** |
 | `shiptrack-platform-apply` | `…/shiptrack-platform:environment:dev` | `PowerUserAccess` (includes `iam:CreateServiceLinkedRole`) + IAM write limited to `shiptrack-*` roles/policies; state read/write |
-| `shiptrack-legacy-plan` | `…/shiptrack-legacy:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + legacy state/lock |
-| `shiptrack-legacy-apply` | `…/shiptrack-legacy:environment:dev` | EC2/ASG/SSM/S3/Logs/CloudWatch for `shiptrack-legacy-*`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` only with `iam:PermissionsBoundary` = boundary ARN and name `shiptrack-legacy-*`; `iam:PassRole` to `shiptrack-legacy-*` |
+| `shiptrack-legacy-plan` | `…/shiptrack-legacy:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + legacy state/lock (`.tflock` writes, state-key KMS decrypt); `secretsmanager:GetSecretValue` on the test-routing token (`assess.yml` k6 runs) |
+| `shiptrack-legacy-apply` | `…/shiptrack-legacy:environment:dev` | EC2/ASG/SSM/S3/Logs/CloudWatch for `shiptrack-legacy-*`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` only with `iam:PermissionsBoundary` = boundary ARN and name `shiptrack-legacy-*`; `iam:PassRole` to `shiptrack-legacy-*`; instance-profile create/delete/tag/add-role actions on `instance-profile/shiptrack-legacy-*`; use of the platform logs key (conditioned on `kms:ViaService = logs.<region>.amazonaws.com`) so log groups can be encrypted |
 | `shiptrack-legacy-deploy` | `…/shiptrack-legacy:environment:dev` | `s3:PutObject` to the artifact bucket; `ssm:SendCommand` limited to `ShipTrack-*` documents and instances tagged `Stack=legacy`; `ssm:GetCommandInvocation`/`ListCommandInvocations`; `autoscaling:DescribeAutoScalingGroups`, `ec2:DescribeInstances`; `ssm:GetParameter(s)` on `/shiptrack/*`; `ssm:PutParameter` on `/shiptrack/legacy/current_release`; `secretsmanager:GetSecretValue` on the test-routing token |
 | `shiptrack-modern-plan` | `…/shiptrack-modern:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + modern state/locks (EKS view access entry is granted in the modern repo) |
 | `shiptrack-modern-apply` | `…/shiptrack-modern:environment:dev` | EKS/EC2/ECR/SQS/Events/APS/Logs/CloudWatch/SSM, KMS key creation (`alias/shiptrack-eks`); `iam:CreateServiceLinkedRole`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` boundary-conditioned, name `shiptrack-modern-*`; `iam:PassRole` to `shiptrack-modern-*` |
@@ -265,7 +266,7 @@ The org name, repo names, and environment name are variables. **Gotcha:** the pl
 |---|---|---|
 | `alias/shiptrack-data` | RDS storage, POD bucket | Root delegation to IAM; services via `kms:ViaService` |
 | `alias/shiptrack-secrets` | Secrets Manager (DB secrets, RDS master secret) | Root delegation to IAM |
-| `alias/shiptrack-logs` | CloudWatch Logs, SNS, CloudTrail | Grant `logs.<region>.amazonaws.com` with the `kms:EncryptionContext:aws:logs:arn` condition; grant `cloudwatch.amazonaws.com` and `sns.amazonaws.com` for encrypted alarm topics; grant `cloudtrail.amazonaws.com` |
+| `alias/shiptrack-logs` | CloudWatch Logs, SNS, CloudTrail | Grant `logs.<region>.amazonaws.com` with the `kms:EncryptionContext:aws:logs:arn` condition; grant `cloudwatch.amazonaws.com` and `sns.amazonaws.com` for encrypted alarm topics; grant `cloudtrail.amazonaws.com`; grant `events.amazonaws.com` (EventBridge publishes Security Hub findings to the encrypted SNS topic); grant `config.amazonaws.com` with `aws:SourceAccount` (AWS Config delivers to the CloudTrail bucket) |
 
 All keys have rotation enabled and a 30-day deletion window. Workload roles in other repos get decrypt through their **IAM policies**, conditioned on `kms:ViaService`. Do not enumerate cross-repo role ARNs in key policies.
 
@@ -279,7 +280,7 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
 - `deletion_protection = true`, final snapshot required, backups 7 days, `copy_tags_to_snapshot = true`
 - Explicit maintenance and backup windows (variables)
 - `auto_minor_version_upgrade = true`
-- Monitoring: CloudWatch Database Insights, Standard mode **[VERIFY — Performance Insights console/API transition]**; Enhanced Monitoring at 60 s
+- Monitoring: CloudWatch Database Insights, Standard mode (the Performance Insights console ends July 31, 2026); Enhanced Monitoring at 60 s
 - `enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]`, log group retention 14 days
 - Parameter group:
   - `rds.force_ssl = 1`
@@ -410,6 +411,7 @@ variable "cutover" {
 
 **Alert topics**
 - `shiptrack-alerts-sev1` and `shiptrack-alerts-sev2`, encrypted with `shiptrack-logs`. **Gotcha:** CloudWatch alarms cannot publish to SNS topics encrypted with the AWS-managed key, so these must use the CMK.
+- The `sev2` topic policy allows `events.amazonaws.com` to `sns:Publish` (Security Hub findings rule, §6.7).
 - Email subscriptions from `var.alert_emails` (each recipient must confirm manually).
 
 **Severity model**
@@ -547,9 +549,9 @@ These tools own the **shared definition of correct** for both stacks.
 
 All three repositories are public.
 
-- **No identifiers in output.** Committed files, workflow logs, PR comments, artifacts, and evidence must not contain account IDs, ARNs with account IDs, ALB DNS names, instance or host IDs, secret values, or the test-routing token. Use variables and data sources (§0.3). Keep `mask-aws-account-id` at its default (`true`) in `configure-aws-credentials` **[VERIFY]**. Run `::add-mask::` on any value fetched at run time (the token) before using it. Never `echo` variables or enable `set -x` in steps that hold credentials.
+- **No identifiers in output.** Committed files, workflow logs, PR comments, artifacts, and evidence must not contain account IDs, ARNs with account IDs, ALB DNS names, instance or host IDs, secret values, or the test-routing token. Use variables and data sources (§0.3). Set `mask-aws-account-id: true` explicitly in `configure-aws-credentials` (the action's default is `false`). Store role ARNs as GitHub secrets, not variables, so they are masked. Run `::add-mask::` on any value fetched at run time (the token) before using it. Never `echo` variables or enable `set -x` in steps that hold credentials.
 - **Plan output.** PR comments show only resource addresses and actions (from `terraform show -json`), never attribute values. Plan files are never uploaded as artifacts, because public artifacts are downloadable. Apply uses a fresh plan in the same job.
-- **Repository settings.** Branch protection on `dev`; "Require approval for all outside collaborators" for workflows; default `GITHUB_TOKEN` permissions read-only; environments `bootstrap` and `dev` with required reviewers; secret scanning and push protection on. Fork PRs receive no OIDC token, so the plan roles are unreachable from forks.
+- **Repository settings.** Branch protection on `dev` (changes arrive by pull request from short-lived branches); "Require approval for all outside collaborators" for workflows; default `GITHUB_TOKEN` permissions read-only; environments `bootstrap` and `dev` with required reviewers and deployment branches limited to `dev` (an environment job's OIDC `sub` carries no branch, so this is what keeps other branches from requesting apply roles); secret scanning and push protection on. Fork PRs receive no OIDC token, so the plan roles are unreachable from forks.
 - **Evidence and screenshots** committed under `docs/` are scrubbed with placeholders (`<ACCOUNT_ID>`, `<ALB_DNS>`) before merge. A CI check (gitleaks plus a custom rule for 12-digit account IDs and `*.elb.amazonaws.com`) fails the PR otherwise.
 - The architecture, role names, and trust policies are public by design. No security control may depend on the design being secret.
 
@@ -635,10 +637,10 @@ Platform optimization candidates for the final analysis: **O-P1** (NAT vs endpoi
 | R-05 | Single-AZ RDS | `multi_az` toggle; RTO/RPO documented in README |
 | R-06 | Break-glass changes cause Terraform drift | Nightly drift detection + 24 h reconcile rule |
 | R-07 | Plan roles have broad read (`ReadOnlyAccess`) | Accepted; enterprise would scope via SCP/session policies |
+| R-08 | Mixed UI builds across stacks during weighted routing | P90 group stickiness + gate G6 parity + UI source freeze until Wave 2 completes. Long-term fix: serve the UI from S3 + CloudFront (roadmap) |
 | R-09 | The platform plan role can read the DB secrets and is assumable by any `pull_request` run in the repo, and the workflow file comes from the PR branch | The repos are public: fork PRs receive no OIDC token, and only collaborators can push branches; require approval for workflows from outside collaborators; branch protection and `CODEOWNERS` on `dev` and `.github/`. Enterprise: keep secret-bearing resources in a separate state, or plan from `dev` only. |
 | R-10 | The seed role has `AdministratorAccess` and is created by hand | Trust pinned to one repo and the protected `bootstrap` environment (required reviewers); used only by `bootstrap-apply.yml`; narrowing or retirement tracked here |
 | R-11 | Public repos disclose the architecture, and logs or evidence can leak identifiers | §6.12 rules, masking, and the scrub check; no security control depends on secrecy of the design |
-| R-08 | Mixed UI builds across stacks during weighted routing | P90 group stickiness + gate G6 parity + UI source freeze until Wave 2 completes. Long-term fix: serve the UI from S3 + CloudFront (roadmap) |
 
 ---
 
@@ -665,7 +667,7 @@ Platform optimization candidates for the final analysis: **O-P1** (NAT vs endpoi
 
 1. Legacy application, locally and in CI (legacy L1, L1b, and the build parts of L2).
 2. Platform Foundation: P0, then **P6a** (`terraform-pr.yml` and `terraform-apply.yml`, built immediately after P0 because every later phase is applied through them), then P1, P2, P3, P5.
-3. Legacy infrastructure (legacy L3, L4). Needs the Foundation applied.
+3. Legacy infrastructure (legacy L3, L4). Needs the Foundation applied, and `db/bootstrap.sql` (§6.4 runbook) must have been run before the first legacy deploy.
 4. Platform remainder: P4, **P6b** (`drift.yml`, `validation.yml`), P7, P8. The legacy assessment (legacy L5) needs all of platform.
 5. Modern application (modern M0–M2), built locally with OrbStack and LocalStack and tested in CI.
 6. Modern infrastructure and migration (modern M3–M10).
@@ -693,11 +695,12 @@ Phase numbers are otherwise unchanged, and each phase's "Done when" must pass be
 - [x] Security Hub CSPM naming; unified Security Hub GA December 2025 (confirmed; out of scope)
 - [x] ALB console-default TLS policy `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` (confirmed)
 - [ ] AWS provider latest 6.x minor at build time
-- [ ] RDS PostgreSQL 17 latest minor; Database Insights vs Performance Insights settings
-- [ ] CIS v3.0 standard ARN in the chosen region
-- [ ] ALB log-delivery bucket policy principal for the chosen region
+- [x] Performance Insights console ends July 31, 2026; Database Insights Standard is the default (confirmed)
+- [ ] RDS PostgreSQL 17 latest minor
+- [ ] CIS standard ARN in the chosen region (v3.0.0 is supported; v5.0.0 is also available)
+- [ ] ALB log-delivery bucket policy principal for the chosen region (`us-east-1` predates August 2022; the regional ELB account policy and the `logdelivery.elasticloadbalancing.amazonaws.com` principal both appear to be accepted)
 - [ ] GitHub OIDC thumbprint requirement in the pinned provider
 - [ ] EKS split cost allocation enablement path
 - [ ] Current pricing for every §10 driver
-- [ ] `mask-aws-account-id` default in `configure-aws-credentials`
-- [ ] LocalStack edition and service coverage for the Terraform modules you test locally
+- [x] `mask-aws-account-id` defaults to `false`; set it explicitly (confirmed)
+- [ ] LocalStack account and auth token (the Community edition ended March 2026; the free tier is non-commercial); service coverage for the Terraform modules you test locally
