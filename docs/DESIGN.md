@@ -117,8 +117,11 @@ Default region is the `aws_region` variable (default `us-east-1`).
 ```
 shiptrack-platform/
 ├── bootstrap/                    # Applied only by bootstrap-apply.yml (seed role, §6.1)
-│   ├── main.tf  variables.tf  outputs.tf  versions.tf
-│   ├── policies/                 # JSON/HCL policy documents per role
+│   ├── main.tf  variables.tf  outputs.tf  versions.tf  .terraform.lock.hcl
+│   ├── state/                    # Module: state bucket and its key
+│   ├── policies/                 # Module: boundary, trust policies, and each role's permissions
+│   ├── scripts/                  # ci.sh (plan/apply, first-run seeding), github-setup.sh
+│   ├── tests/moto.sh             # Runs ci.sh against a local moto server
 │   └── README.md                 # Manual seed steps + workflow procedure
 ├── terraform/
 │   ├── modules/
@@ -177,9 +180,9 @@ Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a sta
 
 Terraform does **not** manage the OIDC provider or the seed role. It reads the provider with `data "aws_iam_openid_connect_provider"`. Keeping the seed role manual means the pipeline cannot modify its own foundation.
 
-**`bootstrap-apply.yml`** (`workflow_dispatch`): jobs `plan` and `apply`, both with `environment: bootstrap`. The second approval is the review of the plan summary (§6.12) printed by the first job. `bootstrap/` has no committed backend block. The workflow checks whether the state bucket exists (`head-bucket`):
-- **First run:** apply with local state, then generate `backend_override.tf` (never committed) and run `terraform init -migrate-state -force-copy` in the same job.
-- **Later runs:** write the override first and initialize against S3.
+**`bootstrap-apply.yml`** (`workflow_dispatch`): jobs `plan` and `apply`, both with `environment: bootstrap`, running `bootstrap/scripts/ci.sh`. The second approval is the review of the plan summary (§6.12) printed by the first job. `bootstrap/` has no committed backend block. The script checks whether the state bucket exists (`head-bucket`):
+- **First run:** create only the bucket, with local state; generate `backend.tf` (git-ignored) and run `terraform init -migrate-state -force-copy` in the same job; then plan and apply everything else with remote state. Keeping the local-state step to one resource keeps the window in which state could be lost as small as possible.
+- **Later runs:** write `backend.tf` first and initialize against S3.
 
 Apply uses a fresh plan from the same job. No plan file is uploaded as an artifact.
 
@@ -198,7 +201,7 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
 | `modern/cluster/dev.tfstate` | modern (cluster root) |
 | `modern/addons/dev.tfstate` | modern (addons root) |
 
-- Bootstrap's own state starts local inside the first `bootstrap-apply.yml` run and is migrated into the bucket in that same job. `bootstrap/README.md` documents the procedure and the recovery if the migration step fails.
+- Bootstrap's own state starts local inside the first `bootstrap-apply.yml` run and is migrated into the bucket in that same job, before anything else is created. `bootstrap/README.md` documents the procedure and the recovery if the migration step fails.
 
 **GitHub OIDC provider:** created manually (prerequisite 1): URL `https://token.actions.githubusercontent.com`, client ID `sts.amazonaws.com`. Omit the thumbprint if the console allows it, since AWS no longer validates the GitHub thumbprint **[VERIFY]**. Only one provider per URL can exist in an account, which is why Terraform reads it by data source instead of creating it.
 
@@ -230,7 +233,7 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
 | `shiptrack-modern-release` | `…/shiptrack-modern:ref:refs/heads/dev` | ECR push/pull on `shiptrack/app` only (`ecr:GetAuthorizationToken`, `BatchCheckLayerAvailability`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`, `PutImage`, `BatchGetImage`, `GetDownloadUrlForLayer`) |
 | `shiptrack-modern-deploy` | `…/shiptrack-modern:environment:dev` | `eks:DescribeCluster`; `ssm:GetParameter(s)` on `/shiptrack/*`; `secretsmanager:GetSecretValue` on the test-routing token. Kubernetes permissions come from an EKS access entry plus namespace RBAC (modern repo) |
 
-The org name, repo names, and environment name are variables. **Gotcha:** the plan roles must be able to write `.tflock` objects, because S3 native locking writes a lock file even during `plan`. The seed role `shiptrack-bootstrap` is a tenth role but is manual and outside this table.
+The org name, repo names, and environment name are variables. The permissions above are the starting point: a missing action shows up as `AccessDenied` in the pipeline that needs it, and the fix is made in `bootstrap/policies/`. The platform apply role also carries explicit denies on the roles, boundary, and state that bootstrap owns, so the platform pipeline cannot rewrite its own foundation. **Gotcha:** the plan roles must be able to write `.tflock` objects, because S3 native locking writes a lock file even during `plan`. The seed role `shiptrack-bootstrap` is a tenth role but is manual and outside this table.
 
 ### 6.2 Network (`modules/network`)
 
@@ -551,7 +554,7 @@ All three repositories are public.
 
 - **No identifiers in output.** Committed files, workflow logs, PR comments, artifacts, and evidence must not contain account IDs, ARNs with account IDs, ALB DNS names, instance or host IDs, secret values, or the test-routing token. Use variables and data sources (§0.3). Set `mask-aws-account-id: true` explicitly in `configure-aws-credentials` (the action's default is `false`). Store role ARNs as GitHub secrets, not variables, so they are masked. Run `::add-mask::` on any value fetched at run time (the token) before using it. Never `echo` variables or enable `set -x` in steps that hold credentials.
 - **Plan output.** PR comments show only resource addresses and actions (from `terraform show -json`), never attribute values. Plan files are never uploaded as artifacts, because public artifacts are downloadable. Apply uses a fresh plan in the same job.
-- **Repository settings.** Branch protection on `dev` (changes arrive by pull request from short-lived branches); "Require approval for all outside collaborators" for workflows; default `GITHUB_TOKEN` permissions read-only; environments `bootstrap` and `dev` with required reviewers and deployment branches limited to `dev` (an environment job's OIDC `sub` carries no branch, so this is what keeps other branches from requesting apply roles); secret scanning and push protection on. Fork PRs receive no OIDC token, so the plan roles are unreachable from forks.
+- **Repository settings** (applied by `bootstrap/scripts/github-setup.sh`). Branch protection on `dev` (changes arrive by pull request from short-lived branches); "Require approval for all outside collaborators" for workflows; default `GITHUB_TOKEN` permissions read-only; environments `bootstrap` and `dev` with required reviewers and deployment branches limited to `dev` (an environment job's OIDC `sub` carries no branch, so this is what keeps other branches from requesting apply roles); secret scanning and push protection on. Fork PRs receive no OIDC token, so the plan roles are unreachable from forks.
 - **Evidence and screenshots** committed under `docs/` are scrubbed with placeholders (`<ACCOUNT_ID>`, `<ALB_DNS>`) before merge. A CI check (gitleaks plus a custom rule for 12-digit account IDs and `*.elb.amazonaws.com`) fails the PR otherwise.
 - The architecture, role names, and trust policies are public by design. No security control may depend on the design being secret.
 
@@ -676,7 +679,7 @@ Phase numbers are otherwise unchanged, and each phase's "Done when" must pass be
 
 | Phase | Deliverables | Done when |
 |---|---|---|
-| **P0 Bootstrap** | `bootstrap/` (state bucket, state KMS key, boundary, 9 roles; OIDC provider read by data source), `bootstrap-apply.yml`, README with the manual seed steps (§6.1) and workflow procedure | `terraform validate` + `checkov` pass; `actionlint` passes; trust policies show exact `sub` strings in the README; after you run the workflow, the state is in S3 and a second run is a no-op |
+| **P0 Bootstrap** | `bootstrap/` (state bucket, state KMS key, boundary, 9 roles; OIDC provider read by data source), `bootstrap-apply.yml`, `scripts/ci.sh`, `scripts/github-setup.sh`, `tests/moto.sh`, README with the manual seed steps (§6.1) and workflow procedure | `terraform validate`, `tflint`, `trivy config`, and `checkov` pass; `actionlint` and `shellcheck` pass; `tests/moto.sh` passes; trust policies show exact `sub` strings in the README; after you run the workflow, the state is in S3 and a second run is a no-op |
 | **P1 Network + KMS** | `modules/network`, `modules/kms`, `envs/dev` wiring, backend config | Plan clean; subnet tags match §6.2 |
 | **P2 Database** | `modules/database`, secrets with write-only args, `db/bootstrap.sql`, `db/RUNBOOK-db-bootstrap.md` | SQL is idempotent (`psql` run twice against a local Postgres 17 container in a test script) |
 | **P3 Storage + Ingress** | `modules/storage`, `modules/ingress` (TGs, rules, `cutover` var with validation) | Plan shows 4 listener rules (P10, P20, P90, P100) + weighted default action; changing weights alters only rules/default action |
