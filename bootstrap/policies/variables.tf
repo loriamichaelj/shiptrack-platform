@@ -37,6 +37,11 @@ variable "branch" {
   type        = string
 }
 
+variable "role_prefix" {
+  description = "Prefix of every IAM role, instance profile, and customer managed policy name: <owner>-<environment>-<project>."
+  type        = string
+}
+
 variable "oidc_provider_arn" {
   description = "ARN of the GitHub OIDC provider created by hand."
   type        = string

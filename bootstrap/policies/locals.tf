@@ -3,8 +3,9 @@ locals {
   a   = var.account_id
   r   = var.region
   env = var.environment
+  rp  = var.role_prefix
 
-  boundary_arn  = "arn:${local.p}:iam::${local.a}:policy/shiptrack-workload-boundary"
+  boundary_arn  = "arn:${local.p}:iam::${local.a}:policy/${var.role_prefix}-workload-boundary"
   seed_role_arn = "arn:${local.p}:iam::${local.a}:role/${var.seed_role_name}"
 
   stacks = ["platform", "legacy", "modern"]
@@ -20,15 +21,15 @@ locals {
   sub_branch       = { for stack, repo in local.repos : stack => "repo:${repo}:ref:refs/heads/${var.branch}" }
 
   role_subs = {
-    "shiptrack-platform-plan"  = [local.sub_pull_request["platform"], local.sub_branch["platform"]]
-    "shiptrack-platform-apply" = [local.sub_environment["platform"]]
-    "shiptrack-legacy-plan"    = [local.sub_pull_request["legacy"], local.sub_branch["legacy"]]
-    "shiptrack-legacy-apply"   = [local.sub_environment["legacy"]]
-    "shiptrack-legacy-deploy"  = [local.sub_environment["legacy"]]
-    "shiptrack-modern-plan"    = [local.sub_pull_request["modern"], local.sub_branch["modern"]]
-    "shiptrack-modern-apply"   = [local.sub_environment["modern"]]
-    "shiptrack-modern-release" = [local.sub_branch["modern"]]
-    "shiptrack-modern-deploy"  = [local.sub_environment["modern"]]
+    "${local.rp}-platform-plan"  = [local.sub_pull_request["platform"], local.sub_branch["platform"]]
+    "${local.rp}-platform-apply" = [local.sub_environment["platform"]]
+    "${local.rp}-legacy-plan"    = [local.sub_pull_request["legacy"], local.sub_branch["legacy"]]
+    "${local.rp}-legacy-apply"   = [local.sub_environment["legacy"]]
+    "${local.rp}-legacy-deploy"  = [local.sub_environment["legacy"]]
+    "${local.rp}-modern-plan"    = [local.sub_pull_request["modern"], local.sub_branch["modern"]]
+    "${local.rp}-modern-apply"   = [local.sub_environment["modern"]]
+    "${local.rp}-modern-release" = [local.sub_branch["modern"]]
+    "${local.rp}-modern-deploy"  = [local.sub_environment["modern"]]
   }
 
   # Resources the bootstrap owns. platform-apply must not be able to change them.

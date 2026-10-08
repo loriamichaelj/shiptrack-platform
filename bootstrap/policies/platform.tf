@@ -9,7 +9,7 @@ data "aws_iam_policy_document" "platform_plan" {
 data "aws_iam_policy_document" "platform_apply" {
   source_policy_documents = [data.aws_iam_policy_document.state_apply["platform"].json]
 
-  # PowerUserAccess covers everything except IAM. IAM writes are limited to shiptrack-* names.
+  # PowerUserAccess covers everything except IAM. IAM writes are limited to names under the role prefix.
   statement {
     sid = "ManageShiptrackIam"
     actions = [
@@ -38,9 +38,9 @@ data "aws_iam_policy_document" "platform_apply" {
       "iam:PassRole",
     ]
     resources = [
-      "arn:${local.p}:iam::${local.a}:role/shiptrack-*",
-      "arn:${local.p}:iam::${local.a}:policy/shiptrack-*",
-      "arn:${local.p}:iam::${local.a}:instance-profile/shiptrack-*",
+      "arn:${local.p}:iam::${local.a}:role/${local.rp}-*",
+      "arn:${local.p}:iam::${local.a}:policy/${local.rp}-*",
+      "arn:${local.p}:iam::${local.a}:instance-profile/${local.rp}-*",
     ]
   }
 

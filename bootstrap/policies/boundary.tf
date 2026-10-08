@@ -14,7 +14,7 @@ locals {
 }
 
 # A permission boundary is an allow-list of service namespaces; the roles it caps carry the
-# narrower resource-scoped policies. iam:PassRole is limited to shiptrack-* roles (AWS-0342).
+# narrower resource-scoped policies. iam:PassRole is limited to roles under the role prefix (AWS-0342).
 #trivy:ignore:AWS-0345
 #trivy:ignore:AWS-0342
 data "aws_iam_policy_document" "boundary" {
@@ -39,7 +39,7 @@ data "aws_iam_policy_document" "boundary" {
   statement {
     sid       = "PassShiptrackRoles"
     actions   = ["iam:PassRole"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-*"]
   }
 
   # Karpenter creates instance profiles at runtime.

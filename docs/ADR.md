@@ -65,7 +65,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 ## ADR-0005: seed-role-and-bootstrap-workflow
 
-**Status:** Accepted
+**Status:** Accepted; role names superseded by ADR-0011
 
 **Context:** Every pipeline needs roles and a state bucket before it can run, and all AWS changes must go through GitHub Actions. An account can hold only one OIDC provider per URL.
 
@@ -127,3 +127,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** `bootstrap/tests/moto.sh` runs the real `ci.sh` against a local moto server: first-run seeding and state migration, a no-op second run, the exact trust-policy `sub` claims, and IAM policy size limits. The bucket's TLS-only policy is left out of the copy that runs against moto, because moto serves plain HTTP and enforces the policy; its content is checked from a plan of the unmodified configuration.
 
 **Consequences:** Most bootstrap defects are found before the first real run. IAM actions and condition keys are not validated against AWS, so permission gaps still surface as AccessDenied in the pipelines that need them.
+
+## ADR-0011: iam-naming-convention
+
+**Status:** Accepted
+
+**Context:** Roles in the AWS account must be named `<owner>-<environment>-<project>-...`. Role names were `shiptrack-*`, hardcoded in the bootstrap policies, so a change of convention would touch every IAM statement.
+
+**Decision:** Every IAM role, instance profile, and customer managed policy is named under a role prefix, `<owner>-<environment>-<project>`, supplied as the `role_prefix` Terraform variable and the `ROLE_PREFIX` repository variable; nothing hardcodes it. The nine deploy roles and the permission boundary are `<PREFIX>-<stack>-<purpose>` and `<PREFIX>-workload-boundary` for the `dev` environment. The hand-made seed role is `<owner>-bootstrap-<project>-seed`, supplied as `seed_role_name` and `SEED_ROLE_NAME`. The IAM scopes of the pipeline roles follow the prefix: platform `<PREFIX>-*`, legacy `<PREFIX>-legacy-*`, modern `<PREFIX>-modern-*`. Non-IAM resources (state bucket, key aliases, log groups, alarms, S3 buckets) keep their `shiptrack-` names. This replaces the `shiptrack-*` role and seed role names in ADR-0005.
+
+**Consequences:** The convention is changed in one variable. The prefix must be 2 to 40 characters so role names stay within the 64-character IAM limit. `ROLE_PREFIX` must be consistent with the `Environment` the roles trust, because the deploy roles' trust and the prefix are set independently. The legacy and modern Terraform must name their roles under the prefix or the apply roles are denied.

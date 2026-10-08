@@ -42,6 +42,8 @@ jobs:
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           TF_VAR_github_org: ${{ github.repository_owner }}
+          TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
+          TF_VAR_seed_role_name: ${{ vars.SEED_ROLE_NAME }}
         run: bootstrap/scripts/ci.sh plan
 
   apply:
@@ -69,4 +71,6 @@ jobs:
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           TF_VAR_github_org: ${{ github.repository_owner }}
+          TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
+          TF_VAR_seed_role_name: ${{ vars.SEED_ROLE_NAME }}
         run: bootstrap/scripts/ci.sh apply

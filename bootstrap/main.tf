@@ -46,6 +46,7 @@ module "policies" {
   github_org        = var.github_org
   repositories      = var.repositories
   environment       = var.environment
+  role_prefix       = var.role_prefix
   branch            = var.branch
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
   seed_role_name    = var.seed_role_name
@@ -54,7 +55,7 @@ module "policies" {
 }
 
 resource "aws_iam_policy" "workload_boundary" {
-  name        = "shiptrack-workload-boundary"
+  name        = "${var.role_prefix}-workload-boundary"
   description = "Permission boundary for every role created by the legacy and modern pipelines"
   policy      = module.policies.boundary_json
 }

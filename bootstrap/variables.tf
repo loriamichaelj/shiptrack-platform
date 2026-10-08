@@ -40,10 +40,19 @@ variable "branch" {
   default     = "dev"
 }
 
+variable "role_prefix" {
+  description = "Prefix of every IAM role, instance profile, and customer managed policy name: <owner>-<environment>-<project>. The pipelines create roles and policies only under this prefix."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$", var.role_prefix))
+    error_message = "role_prefix must be 2 to 40 characters of lowercase letters, digits, and hyphens, starting and ending with a letter or digit."
+  }
+}
+
 variable "seed_role_name" {
   description = "Name of the manually created role that runs bootstrap-apply.yml."
   type        = string
-  default     = "shiptrack-bootstrap"
 }
 
 variable "owner" {

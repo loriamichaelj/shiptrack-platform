@@ -39,6 +39,10 @@ export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT_URL="http://localhost:$port"
 export AWS_S3_USE_PATH_STYLE=true
 export TF_VAR_github_org=$org
+# A prefix unlike the real one: the roles must follow the variable, not a hardcoded name.
+rp=testowner-dev-shiptrack
+export TF_VAR_role_prefix=$rp
+export TF_VAR_seed_role_name=testowner-bootstrap-shiptrack-seed
 export TF_BACKEND_EXTRA='    use_path_style              = true
     skip_credentials_validation = true
     skip_requesting_account_id  = true
@@ -97,34 +101,34 @@ eq "the key alias exists" "$(aws kms list-aliases --query "Aliases[?AliasName=='
 section "trust policies (exact sub claims)"
 sub_of() { aws iam get-role --role-name "$1" --query 'Role.AssumeRolePolicyDocument' --output json | jq -r '.Statement[0].Condition.StringEquals."token.actions.githubusercontent.com:sub" | if type=="array" then join(" | ") else . end'; }
 r="repo:$org"
-eq "platform-plan"  "$(sub_of shiptrack-platform-plan)"  "$r/shiptrack-platform:pull_request | $r/shiptrack-platform:ref:refs/heads/dev"
-eq "platform-apply" "$(sub_of shiptrack-platform-apply)" "$r/shiptrack-platform:environment:dev"
-eq "legacy-plan"    "$(sub_of shiptrack-legacy-plan)"    "$r/shiptrack-legacy:pull_request | $r/shiptrack-legacy:ref:refs/heads/dev"
-eq "legacy-apply"   "$(sub_of shiptrack-legacy-apply)"   "$r/shiptrack-legacy:environment:dev"
-eq "legacy-deploy"  "$(sub_of shiptrack-legacy-deploy)"  "$r/shiptrack-legacy:environment:dev"
-eq "modern-plan"    "$(sub_of shiptrack-modern-plan)"    "$r/shiptrack-modern:pull_request | $r/shiptrack-modern:ref:refs/heads/dev"
-eq "modern-apply"   "$(sub_of shiptrack-modern-apply)"   "$r/shiptrack-modern:environment:dev"
-eq "modern-release" "$(sub_of shiptrack-modern-release)" "$r/shiptrack-modern:ref:refs/heads/dev"
-eq "modern-deploy"  "$(sub_of shiptrack-modern-deploy)"  "$r/shiptrack-modern:environment:dev"
-eq "audience is sts.amazonaws.com" "$(aws iam get-role --role-name shiptrack-legacy-deploy --query 'Role.AssumeRolePolicyDocument.Statement[0].Condition.StringEquals."token.actions.githubusercontent.com:aud"' --output text)" "sts.amazonaws.com"
-eq "exactly nine deploy roles" "$(aws iam list-roles --query "Roles[?starts_with(RoleName,'shiptrack-')].RoleName" --output json | jq length)" "9"
+eq "platform-plan"  "$(sub_of $rp-platform-plan)"  "$r/shiptrack-platform:pull_request | $r/shiptrack-platform:ref:refs/heads/dev"
+eq "platform-apply" "$(sub_of $rp-platform-apply)" "$r/shiptrack-platform:environment:dev"
+eq "legacy-plan"    "$(sub_of $rp-legacy-plan)"    "$r/shiptrack-legacy:pull_request | $r/shiptrack-legacy:ref:refs/heads/dev"
+eq "legacy-apply"   "$(sub_of $rp-legacy-apply)"   "$r/shiptrack-legacy:environment:dev"
+eq "legacy-deploy"  "$(sub_of $rp-legacy-deploy)"  "$r/shiptrack-legacy:environment:dev"
+eq "modern-plan"    "$(sub_of $rp-modern-plan)"    "$r/shiptrack-modern:pull_request | $r/shiptrack-modern:ref:refs/heads/dev"
+eq "modern-apply"   "$(sub_of $rp-modern-apply)"   "$r/shiptrack-modern:environment:dev"
+eq "modern-release" "$(sub_of $rp-modern-release)" "$r/shiptrack-modern:ref:refs/heads/dev"
+eq "modern-deploy"  "$(sub_of $rp-modern-deploy)"  "$r/shiptrack-modern:environment:dev"
+eq "audience is sts.amazonaws.com" "$(aws iam get-role --role-name $rp-legacy-deploy --query 'Role.AssumeRolePolicyDocument.Statement[0].Condition.StringEquals."token.actions.githubusercontent.com:aud"' --output text)" "sts.amazonaws.com"
+eq "exactly nine deploy roles" "$(aws iam list-roles --query "Roles[?starts_with(RoleName,'$rp-')].RoleName" --output json | jq length)" "9"
 
 section "managed policies"
 attached() { aws iam list-attached-role-policies --role-name "$1" --query 'AttachedPolicies[].PolicyName' --output json | jq -r 'sort | join(",")'; }
-eq "platform-apply" "$(attached shiptrack-platform-apply)" "PowerUserAccess,ReadOnlyAccess"
-eq "platform-plan" "$(attached shiptrack-platform-plan)" "ReadOnlyAccess"
-eq "legacy-deploy has none" "$(attached shiptrack-legacy-deploy)" ""
-eq "modern-release has none" "$(attached shiptrack-modern-release)" ""
+eq "platform-apply" "$(attached $rp-platform-apply)" "PowerUserAccess,ReadOnlyAccess"
+eq "platform-plan" "$(attached $rp-platform-plan)" "ReadOnlyAccess"
+eq "legacy-deploy has none" "$(attached $rp-legacy-deploy)" ""
+eq "modern-release has none" "$(attached $rp-modern-release)" ""
 
 section "policy size limits"
 nonws() { jq -c . | tr -d ' \n' | wc -c | tr -d ' '; }
-for role in shiptrack-platform-plan shiptrack-platform-apply shiptrack-legacy-plan shiptrack-legacy-apply shiptrack-legacy-deploy shiptrack-modern-plan shiptrack-modern-apply shiptrack-modern-release shiptrack-modern-deploy; do
+for role in "$rp"-{platform-plan,platform-apply,legacy-plan,legacy-apply,legacy-deploy,modern-plan,modern-apply,modern-release,modern-deploy}; do
   size=$(aws iam get-role-policy --role-name "$role" --policy-name "$role-permissions" --query PolicyDocument --output json | nonws)
   trust=$(aws iam get-role --role-name "$role" --query Role.AssumeRolePolicyDocument --output json | nonws)
   [[ $size -le 10240 ]] && pass "$role inline policy $size/10240" || fail "$role inline policy is $size characters (limit 10240)"
   [[ $trust -le 2048 ]] && pass "$role trust policy $trust/2048" || fail "$role trust policy is $trust characters (limit 2048)"
 done
-arn=$(aws iam list-policies --scope Local --query "Policies[?PolicyName=='shiptrack-workload-boundary'].Arn" --output text)
+arn=$(aws iam list-policies --scope Local --query "Policies[?PolicyName=='$rp-workload-boundary'].Arn" --output text)
 version=$(aws iam get-policy --policy-arn "$arn" --query Policy.DefaultVersionId --output text)
 bsize=$(aws iam get-policy-version --policy-arn "$arn" --version-id "$version" --query PolicyVersion.Document --output json | nonws)
 [[ $bsize -le 6144 ]] && pass "boundary policy $bsize/6144" || fail "boundary policy is $bsize characters (limit 6144)"

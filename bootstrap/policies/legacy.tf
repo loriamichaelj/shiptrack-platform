@@ -106,7 +106,7 @@ data "aws_iam_policy_document" "legacy_apply" {
   statement {
     sid       = "CreateRolesWithBoundary"
     actions   = ["iam:CreateRole", "iam:PutRolePolicy"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-legacy-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-legacy-*"]
 
     condition {
       test     = "StringEquals"
@@ -118,7 +118,7 @@ data "aws_iam_policy_document" "legacy_apply" {
   statement {
     sid       = "AttachApprovedPolicies"
     actions   = ["iam:AttachRolePolicy"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-legacy-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-legacy-*"]
 
     condition {
       test     = "StringEquals"
@@ -132,7 +132,7 @@ data "aws_iam_policy_document" "legacy_apply" {
       values = [
         "arn:${local.p}:iam::aws:policy/AmazonSSMManagedInstanceCore",
         "arn:${local.p}:iam::aws:policy/CloudWatchAgentServerPolicy",
-        "arn:${local.p}:iam::${local.a}:policy/shiptrack-legacy-*",
+        "arn:${local.p}:iam::${local.a}:policy/${local.rp}-legacy-*",
       ]
     }
   }
@@ -149,7 +149,7 @@ data "aws_iam_policy_document" "legacy_apply" {
       "iam:TagRole",
       "iam:UntagRole",
     ]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-legacy-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-legacy-*"]
   }
 
   statement {
@@ -163,7 +163,7 @@ data "aws_iam_policy_document" "legacy_apply" {
       "iam:TagPolicy",
       "iam:UntagPolicy",
     ]
-    resources = ["arn:${local.p}:iam::${local.a}:policy/shiptrack-legacy-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:policy/${local.rp}-legacy-*"]
   }
 
   statement {
@@ -176,13 +176,13 @@ data "aws_iam_policy_document" "legacy_apply" {
       "iam:AddRoleToInstanceProfile",
       "iam:RemoveRoleFromInstanceProfile",
     ]
-    resources = ["arn:${local.p}:iam::${local.a}:instance-profile/shiptrack-legacy-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:instance-profile/${local.rp}-legacy-*"]
   }
 
   statement {
     sid       = "PassRoleToEc2"
     actions   = ["iam:PassRole"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-legacy-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-legacy-*"]
 
     condition {
       test     = "StringEquals"

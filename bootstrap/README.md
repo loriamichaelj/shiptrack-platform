@@ -1,7 +1,7 @@
 # bootstrap
 
 Creates what every other pipeline needs before it can run: the Terraform state bucket and its key,
-the `shiptrack-workload-boundary` permission boundary, and the nine GitHub OIDC deploy roles.
+the `<PREFIX>-workload-boundary` permission boundary, and the nine GitHub OIDC deploy roles.
 
 It is applied **only** by `.github/workflows/bootstrap-apply.yml`, using a seed role that you create
 by hand once. Nothing is applied from a workstation. See `docs/DESIGN.md` §6.1 for the design.
@@ -10,6 +10,23 @@ by hand once. Nothing is applied from a workstation. See `docs/DESIGN.md` §6.1 
 
 Replace `<ORG>` with your GitHub user or organization. Account IDs stay out of this repository, so
 the examples read the account from your own AWS session.
+
+### Naming
+
+Every IAM role, instance profile, and customer managed policy is named
+`<OWNER>-<environment>-<project>-...`. The part up to the project is the **role prefix**, supplied as
+the `ROLE_PREFIX` repository variable and the `role_prefix` Terraform variable; nothing in the code
+hardcodes it. The platform pipeline can create IAM only under `<PREFIX>-*`, and the legacy and
+modern pipelines only under `<PREFIX>-legacy-*` and `<PREFIX>-modern-*`.
+
+| Placeholder | Meaning | Example |
+|---|---|---|
+| `<OWNER>` | Owner segment | `cloudbatch818-loria` |
+| `<PREFIX>` | `<OWNER>-<environment>-<project>` for the `dev` environment | `cloudbatch818-loria-dev-shiptrack` |
+| `<SEED>` | Seed role: `<OWNER>-bootstrap-<project>-seed` | `cloudbatch818-loria-bootstrap-shiptrack-seed` |
+
+Resources that are not IAM (the state bucket, key aliases, log groups, and so on) keep their
+`shiptrack-` names.
 
 ### 1. OIDC provider and seed role (AWS, by hand)
 
@@ -37,9 +54,9 @@ cat >/tmp/seed-trust.json <<JSON
   }]
 }
 JSON
-aws iam create-role --role-name shiptrack-bootstrap \
+aws iam create-role --role-name <SEED> \
   --assume-role-policy-document file:///tmp/seed-trust.json
-aws iam attach-role-policy --role-name shiptrack-bootstrap \
+aws iam attach-role-policy --role-name <SEED> \
   --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
 rm /tmp/seed-trust.json
 ```
@@ -69,14 +86,16 @@ outside contributor's workflow, and turns on secret scanning and push protection
 An environment job's OIDC `sub` claim carries no branch, so the deployment-branch rule is what keeps
 a workflow on another branch from requesting an apply role.
 
-### 3. Seed role ARN and region (GitHub)
+### 3. Seed role ARN, region, and names (GitHub)
 
 The ARN contains your account ID, so it is stored as a secret (GitHub masks secrets in logs).
 
 ```sh
 gh secret set AWS_BOOTSTRAP_ROLE_ARN -R <ORG>/shiptrack-platform \
-  --body "$(aws iam get-role --role-name shiptrack-bootstrap --query Role.Arn --output text)"
+  --body "$(aws iam get-role --role-name <SEED> --query Role.Arn --output text)"
 gh variable set AWS_REGION -R <ORG>/shiptrack-platform --body us-east-1
+gh variable set ROLE_PREFIX -R <ORG>/shiptrack-platform --body <PREFIX>
+gh variable set SEED_ROLE_NAME -R <ORG>/shiptrack-platform --body <SEED>
 ```
 
 ### 4. Merge this to `dev`
@@ -100,19 +119,20 @@ After the first apply, give each repository the ARNs of its roles. They are stor
 because they contain the account ID. The `$(...)` keeps them out of your terminal and logs.
 
 ```sh
+ROLE_PREFIX=<PREFIX>
 set_role() { # set_role <repo> <secret> <role>
   gh secret set "$2" -R "<ORG>/$1" \
     --body "$(aws iam get-role --role-name "$3" --query Role.Arn --output text)"
 }
-set_role shiptrack-platform AWS_PLAN_ROLE_ARN   shiptrack-platform-plan
-set_role shiptrack-platform AWS_APPLY_ROLE_ARN  shiptrack-platform-apply
-set_role shiptrack-legacy   AWS_PLAN_ROLE_ARN   shiptrack-legacy-plan
-set_role shiptrack-legacy   AWS_APPLY_ROLE_ARN  shiptrack-legacy-apply
-set_role shiptrack-legacy   AWS_DEPLOY_ROLE_ARN shiptrack-legacy-deploy
-set_role shiptrack-modern   AWS_PLAN_ROLE_ARN    shiptrack-modern-plan
-set_role shiptrack-modern   AWS_APPLY_ROLE_ARN   shiptrack-modern-apply
-set_role shiptrack-modern   AWS_RELEASE_ROLE_ARN shiptrack-modern-release
-set_role shiptrack-modern   AWS_DEPLOY_ROLE_ARN  shiptrack-modern-deploy
+set_role shiptrack-platform AWS_PLAN_ROLE_ARN   "$ROLE_PREFIX"-platform-plan
+set_role shiptrack-platform AWS_APPLY_ROLE_ARN  "$ROLE_PREFIX"-platform-apply
+set_role shiptrack-legacy   AWS_PLAN_ROLE_ARN   "$ROLE_PREFIX"-legacy-plan
+set_role shiptrack-legacy   AWS_APPLY_ROLE_ARN  "$ROLE_PREFIX"-legacy-apply
+set_role shiptrack-legacy   AWS_DEPLOY_ROLE_ARN "$ROLE_PREFIX"-legacy-deploy
+set_role shiptrack-modern   AWS_PLAN_ROLE_ARN    "$ROLE_PREFIX"-modern-plan
+set_role shiptrack-modern   AWS_APPLY_ROLE_ARN   "$ROLE_PREFIX"-modern-apply
+set_role shiptrack-modern   AWS_RELEASE_ROLE_ARN "$ROLE_PREFIX"-modern-release
+set_role shiptrack-modern   AWS_DEPLOY_ROLE_ARN  "$ROLE_PREFIX"-modern-deploy
 for repo in shiptrack-platform shiptrack-legacy shiptrack-modern; do
   gh variable set AWS_REGION -R "<ORG>/$repo" --body us-east-1
 done
@@ -125,15 +145,15 @@ this table. `bootstrap/tests/moto.sh` checks these exact strings.
 
 | Role | `sub` claims |
 |---|---|
-| `shiptrack-platform-plan` | `repo:<ORG>/shiptrack-platform:pull_request`, `repo:<ORG>/shiptrack-platform:ref:refs/heads/dev` |
-| `shiptrack-platform-apply` | `repo:<ORG>/shiptrack-platform:environment:dev` |
-| `shiptrack-legacy-plan` | `repo:<ORG>/shiptrack-legacy:pull_request`, `repo:<ORG>/shiptrack-legacy:ref:refs/heads/dev` |
-| `shiptrack-legacy-apply` | `repo:<ORG>/shiptrack-legacy:environment:dev` |
-| `shiptrack-legacy-deploy` | `repo:<ORG>/shiptrack-legacy:environment:dev` |
-| `shiptrack-modern-plan` | `repo:<ORG>/shiptrack-modern:pull_request`, `repo:<ORG>/shiptrack-modern:ref:refs/heads/dev` |
-| `shiptrack-modern-apply` | `repo:<ORG>/shiptrack-modern:environment:dev` |
-| `shiptrack-modern-release` | `repo:<ORG>/shiptrack-modern:ref:refs/heads/dev` |
-| `shiptrack-modern-deploy` | `repo:<ORG>/shiptrack-modern:environment:dev` |
+| `<PREFIX>-platform-plan` | `repo:<ORG>/shiptrack-platform:pull_request`, `repo:<ORG>/shiptrack-platform:ref:refs/heads/dev` |
+| `<PREFIX>-platform-apply` | `repo:<ORG>/shiptrack-platform:environment:dev` |
+| `<PREFIX>-legacy-plan` | `repo:<ORG>/shiptrack-legacy:pull_request`, `repo:<ORG>/shiptrack-legacy:ref:refs/heads/dev` |
+| `<PREFIX>-legacy-apply` | `repo:<ORG>/shiptrack-legacy:environment:dev` |
+| `<PREFIX>-legacy-deploy` | `repo:<ORG>/shiptrack-legacy:environment:dev` |
+| `<PREFIX>-modern-plan` | `repo:<ORG>/shiptrack-modern:pull_request`, `repo:<ORG>/shiptrack-modern:ref:refs/heads/dev` |
+| `<PREFIX>-modern-apply` | `repo:<ORG>/shiptrack-modern:environment:dev` |
+| `<PREFIX>-modern-release` | `repo:<ORG>/shiptrack-modern:ref:refs/heads/dev` |
+| `<PREFIX>-modern-deploy` | `repo:<ORG>/shiptrack-modern:environment:dev` |
 
 ## State layout
 

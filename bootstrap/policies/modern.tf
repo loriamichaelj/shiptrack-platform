@@ -78,7 +78,7 @@ data "aws_iam_policy_document" "modern_apply" {
   statement {
     sid       = "CreateRolesWithBoundary"
     actions   = ["iam:CreateRole", "iam:PutRolePolicy"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-modern-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-modern-*"]
 
     condition {
       test     = "StringEquals"
@@ -90,7 +90,7 @@ data "aws_iam_policy_document" "modern_apply" {
   statement {
     sid       = "AttachApprovedPolicies"
     actions   = ["iam:AttachRolePolicy"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-modern-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-modern-*"]
 
     condition {
       test     = "StringEquals"
@@ -103,7 +103,7 @@ data "aws_iam_policy_document" "modern_apply" {
       variable = "iam:PolicyARN"
       values = [
         "arn:${local.p}:iam::aws:policy/*",
-        "arn:${local.p}:iam::${local.a}:policy/shiptrack-modern-*",
+        "arn:${local.p}:iam::${local.a}:policy/${local.rp}-modern-*",
       ]
     }
   }
@@ -120,7 +120,7 @@ data "aws_iam_policy_document" "modern_apply" {
       "iam:TagRole",
       "iam:UntagRole",
     ]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-modern-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-modern-*"]
   }
 
   statement {
@@ -134,7 +134,7 @@ data "aws_iam_policy_document" "modern_apply" {
       "iam:TagPolicy",
       "iam:UntagPolicy",
     ]
-    resources = ["arn:${local.p}:iam::${local.a}:policy/shiptrack-modern-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:policy/${local.rp}-modern-*"]
   }
 
   statement {
@@ -147,13 +147,13 @@ data "aws_iam_policy_document" "modern_apply" {
       "iam:AddRoleToInstanceProfile",
       "iam:RemoveRoleFromInstanceProfile",
     ]
-    resources = ["arn:${local.p}:iam::${local.a}:instance-profile/shiptrack-modern-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:instance-profile/${local.rp}-modern-*"]
   }
 
   statement {
     sid       = "PassRolesToServices"
     actions   = ["iam:PassRole"]
-    resources = ["arn:${local.p}:iam::${local.a}:role/shiptrack-modern-*"]
+    resources = ["arn:${local.p}:iam::${local.a}:role/${local.rp}-modern-*"]
 
     condition {
       test     = "StringEquals"

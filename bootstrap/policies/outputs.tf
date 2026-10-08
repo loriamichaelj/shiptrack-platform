@@ -1,26 +1,26 @@
 locals {
   inline_documents = {
-    "shiptrack-platform-plan"  = data.aws_iam_policy_document.platform_plan.json
-    "shiptrack-platform-apply" = data.aws_iam_policy_document.platform_apply.json
-    "shiptrack-legacy-plan"    = data.aws_iam_policy_document.legacy_plan.json
-    "shiptrack-legacy-apply"   = data.aws_iam_policy_document.legacy_apply.json
-    "shiptrack-legacy-deploy"  = data.aws_iam_policy_document.legacy_deploy.json
-    "shiptrack-modern-plan"    = data.aws_iam_policy_document.modern_plan.json
-    "shiptrack-modern-apply"   = data.aws_iam_policy_document.modern_apply.json
-    "shiptrack-modern-release" = data.aws_iam_policy_document.modern_release.json
-    "shiptrack-modern-deploy"  = data.aws_iam_policy_document.modern_deploy.json
+    "${local.rp}-platform-plan"  = data.aws_iam_policy_document.platform_plan.json
+    "${local.rp}-platform-apply" = data.aws_iam_policy_document.platform_apply.json
+    "${local.rp}-legacy-plan"    = data.aws_iam_policy_document.legacy_plan.json
+    "${local.rp}-legacy-apply"   = data.aws_iam_policy_document.legacy_apply.json
+    "${local.rp}-legacy-deploy"  = data.aws_iam_policy_document.legacy_deploy.json
+    "${local.rp}-modern-plan"    = data.aws_iam_policy_document.modern_plan.json
+    "${local.rp}-modern-apply"   = data.aws_iam_policy_document.modern_apply.json
+    "${local.rp}-modern-release" = data.aws_iam_policy_document.modern_release.json
+    "${local.rp}-modern-deploy"  = data.aws_iam_policy_document.modern_deploy.json
   }
 
   managed_policies = {
-    "shiptrack-platform-plan"  = [local.managed.read_only]
-    "shiptrack-platform-apply" = [local.managed.read_only, local.managed.power_user]
-    "shiptrack-legacy-plan"    = [local.managed.read_only]
-    "shiptrack-legacy-apply"   = [local.managed.read_only]
-    "shiptrack-legacy-deploy"  = []
-    "shiptrack-modern-plan"    = [local.managed.read_only]
-    "shiptrack-modern-apply"   = [local.managed.read_only]
-    "shiptrack-modern-release" = []
-    "shiptrack-modern-deploy"  = []
+    "${local.rp}-platform-plan"  = [local.managed.read_only]
+    "${local.rp}-platform-apply" = [local.managed.read_only, local.managed.power_user]
+    "${local.rp}-legacy-plan"    = [local.managed.read_only]
+    "${local.rp}-legacy-apply"   = [local.managed.read_only]
+    "${local.rp}-legacy-deploy"  = []
+    "${local.rp}-modern-plan"    = [local.managed.read_only]
+    "${local.rp}-modern-apply"   = [local.managed.read_only]
+    "${local.rp}-modern-release" = []
+    "${local.rp}-modern-deploy"  = []
   }
 }
 
