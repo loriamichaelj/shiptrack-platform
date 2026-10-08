@@ -14,8 +14,9 @@ locals {
 }
 
 # A permission boundary is an allow-list of service namespaces; the roles it caps carry the
-# narrower resource-scoped policies.
+# narrower resource-scoped policies. iam:PassRole is limited to shiptrack-* roles (AWS-0342).
 #trivy:ignore:AWS-0345
+#trivy:ignore:AWS-0342
 data "aws_iam_policy_document" "boundary" {
   #checkov:skip=CKV_AWS_107: a permission boundary is an allow-list of service namespaces by design
   #checkov:skip=CKV_AWS_108: a permission boundary is an allow-list of service namespaces by design

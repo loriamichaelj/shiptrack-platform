@@ -34,6 +34,8 @@ resource "aws_kms_alias" "state" {
   target_key_id = aws_kms_key.state.key_id
 }
 
+# Access logging is not enabled: CloudTrail records access to the account (AWS-0089).
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "state" {
   #checkov:skip=CKV_AWS_18: access logging is not enabled; CloudTrail records access to the account
   #checkov:skip=CKV_AWS_144: cross-region replication is out of scope (single region, no DR)
