@@ -78,18 +78,36 @@ resource "aws_guardduty_detector_feature" "s3" {
   detector_id = aws_guardduty_detector.this.id
   name        = "S3_DATA_EVENTS"
   status      = "ENABLED"
+
+  # This feature has no settings of its own here. AWS reports agent-management settings on it, which
+  # would otherwise show as a difference in every plan.
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 resource "aws_guardduty_detector_feature" "eks_audit_logs" {
   detector_id = aws_guardduty_detector.this.id
   name        = "EKS_AUDIT_LOGS"
   status      = "ENABLED"
+
+  # This feature has no settings of its own here. AWS reports agent-management settings on it, which
+  # would otherwise show as a difference in every plan.
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 resource "aws_guardduty_detector_feature" "rds_login_events" {
   detector_id = aws_guardduty_detector.this.id
   name        = "RDS_LOGIN_EVENTS"
   status      = "ENABLED"
+
+  # This feature has no settings of its own here. AWS reports agent-management settings on it, which
+  # would otherwise show as a difference in every plan.
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 resource "aws_guardduty_detector_feature" "runtime" {
