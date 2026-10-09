@@ -20,9 +20,12 @@ output "alb_logs_bucket_arn" {
   value       = aws_s3_bucket.alb_logs.arn
 }
 
+# The trail and the Config delivery channel check that they can write here when they are created,
+# so the policy must exist first.
 output "cloudtrail_bucket_name" {
   description = "Name of the CloudTrail bucket."
   value       = aws_s3_bucket.cloudtrail.id
+  depends_on  = [aws_s3_bucket_policy.cloudtrail]
 }
 
 output "cloudtrail_bucket_arn" {

@@ -166,3 +166,15 @@ variable "alert_emails" {
   type        = string
   default     = ""
 }
+
+variable "enable_pod_data_events" {
+  description = "Record S3 data events for the POD bucket in CloudTrail (billed per event)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_guardduty_runtime" {
+  description = "Enable GuardDuty Runtime Monitoring for EKS with automated agent management (billed per vCPU)."
+  type        = bool
+  default     = true
+}

@@ -249,3 +249,19 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - The security-services topics (`sev2` accepting EventBridge) are in place; the rule that sends Security Hub findings to it is part of P4.
 
 **Consequences:** Until P8, the runbook links lead to a page without those sections. The EventBridge statement in the `sev2` topic policy is built from a policy document and is exercised by the first apply, not by the offline tests. The alarms use `notBreaching` for missing data, so a target group with no traffic stays quiet.
+
+## ADR-0021: p4-security-services
+
+**Status:** Accepted
+
+**Context:** P4 turns on the account-level security services. Several details were left open, and some of the provider's resources do not match the design's wording.
+
+**Decision:**
+- The CloudTrail trail uses advanced event selectors for management events and, behind `enable_pod_data_events`, for S3 data events limited to objects in the POD bucket. Classic and advanced selectors cannot be mixed.
+- GuardDuty Runtime Monitoring is the `RUNTIME_MONITORING` feature with the `EKS_ADDON_MANAGEMENT` additional configuration, which is the automated agent management the design asks for. `EKS_RUNTIME_MONITORING` is the deprecated name **[VERIFY]**.
+- AWS Config records daily with continuous overrides for IAM roles, policies, users, groups, and security groups. It uses a role named under the role prefix, not the service-linked role, so the first apply does not depend on whether that service-linked role already exists. The role may write only under `config/AWSLogs/<account>/Config/` in the CloudTrail bucket, and the bucket policy allows that path.
+- Security Hub CSPM subscribes only to AWS Foundational Security Best Practices v1.0.0 and CIS AWS Foundations Benchmark v3.0.0. The CIS ARN is built for the configured region **[VERIFY at first apply]**.
+- Inspector scans EC2 and ECR. The design asks for the ECR re-scan duration as a variable, but no Terraform resource exposes it, so it is left at the account default and noted here. The registry itself is set to enhanced scanning with continuous re-scan for every repository.
+- Findings routing is one EventBridge rule, new CRITICAL and HIGH findings to the SEV2 topic. The topic policy (P5) already lets EventBridge publish.
+
+**Consequences:** An account that already has a GuardDuty detector, a Config recorder, or Security Hub enabled makes the first apply fail on "already exists"; the fix is to import the existing resource, not to disable it. Runtime Monitoring bills per vCPU once the EKS cluster runs. The register template is `docs/security/findings-register.md`.
