@@ -139,6 +139,7 @@ jobs:
           TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
           TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
           TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
+          TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan
       - name: Comment the plan summary
