@@ -27,9 +27,13 @@ resource "aws_db_parameter_group" "this" {
   family      = var.parameter_group_family
   description = "ShipTrack PostgreSQL: TLS required, slow-query log, idle transactions ended"
 
+  # rds.force_ssl is a static parameter: AWS reports its apply method as pending-reboot, so the
+  # default (immediate) would differ from the read-back value on every plan. The value is already 1,
+  # so setting the method changes nothing about the running instance.
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
   }
 
   parameter {

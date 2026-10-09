@@ -225,3 +225,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** Group stickiness is enabled on the default action and on the track rule for `var.api_stickiness_seconds`, default 1 second, the shortest AWS allows. The UI rule keeps `var.ui_stickiness_seconds` (3600). Dropping the target stickiness on the legacy group was rejected because AP-05 is a requirement. A longer duration was rejected because a weight change would then reach existing clients only as their cookies expire.
 
 **Consequences:** A client is re-rolled between stacks on almost every request, so canary statistics stay per-request and a cutover takes effect at once, as the design intends. The legacy group's own 24-hour cookie still pins a client to one instance within legacy. Because group stickiness is on, a request carries the group-stickiness cookie; a client that ignores cookies is unaffected, since the cookie only prefers a group.
+
+## ADR-0019: parameter-group-apply-method
+
+**Status:** Accepted
+
+**Context:** After the database was applied, every plan still showed an in-place update of the database parameter group. The plan summary named only the address, so the cause was hidden. It now also names the attributes that differ, which showed that only `rds.force_ssl` differed.
+
+**Decision:** `rds.force_ssl` is set with `apply_method = "pending-reboot"`. It is a static parameter, so AWS reports that method on read, and the provider's default of `immediate` never matched. The plan summary keeps the changed-attribute names for updates (values are never printed).
+
+**Consequences:** The plan is clean for the parameter group, so the nightly drift check (P6b) will not report it. The value stays 1, so the running instance is not affected; a future change to the value takes effect at the next reboot.

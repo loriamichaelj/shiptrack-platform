@@ -40,12 +40,30 @@ quietly() {
   rm -f "$out"
 }
 
-# Print the changes in a saved plan: addresses and actions, never attribute values.
+# Print the changes in a saved plan: addresses and actions, never attribute values. For an update it
+# also names the attributes that differ (and, for a parameter group, the parameters), so a
+# perpetual diff can be traced without publishing what changed.
 summarize() {
   terraform show -json "$1" | jq -r '
+    def changed($c):
+      (($c.change.before // {}) as $b | ($c.change.after // {}) as $a
+        | ([$b, $a] | map(keys) | add | unique)
+        | map(select($b[.] != $a[.]))) as $keys
+      | $keys
+      | map(if . == "parameter" then
+              "parameter["
+              + ((((($c.change.before.parameter // []) - ($c.change.after.parameter // []))
+                  + (($c.change.after.parameter // []) - ($c.change.before.parameter // [])))
+                  | map(.name) | unique) | join(","))
+              + "]"
+            else . end)
+      | join(", ");
     [.resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"])] as $changes
     | (if ($changes | length) == 0 then "No changes."
-       else ($changes | map("- `\(.change.actions | join("+"))` \(.address)") | join("\n")) end)
+       else ($changes | map(
+              "- `\(.change.actions | join("+"))` \(.address)"
+              + (if .change.actions == ["update"] then " (changed: \(changed(.)))" else "" end)
+            ) | join("\n")) end)
       + "\n\n\($changes | length) resource change(s).\n"'
 }
 

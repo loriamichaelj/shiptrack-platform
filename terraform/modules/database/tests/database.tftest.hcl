@@ -75,7 +75,7 @@ run "parameters_follow_the_design" {
 
   assert {
     condition = alltrue([
-      anytrue([for p in aws_db_parameter_group.this.parameter : p.name == "rds.force_ssl" && p.value == "1"]),
+      anytrue([for p in aws_db_parameter_group.this.parameter : p.name == "rds.force_ssl" && p.value == "1" && p.apply_method == "pending-reboot"]),
       anytrue([for p in aws_db_parameter_group.this.parameter : p.name == "log_min_duration_statement" && p.value == "500"]),
       anytrue([for p in aws_db_parameter_group.this.parameter : p.name == "idle_in_transaction_session_timeout" && p.value == "60000"]),
     ])
