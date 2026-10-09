@@ -8,12 +8,25 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0002 | `test-routing-header-token` | Planned |
 | 0003 | `plan-role-secret-access` | Planned |
 | 0004 | `nat-vs-interface-endpoints` | Planned |
-| 0005 | `seed-role-and-bootstrap-workflow` | Accepted |
+| 0005 | `seed-role-and-bootstrap-workflow` | Accepted; role names superseded by ADR-0011 |
 | 0006 | `public-repositories` | Planned |
 | 0007 | `dev-branch-and-environment` | Planned |
 | 0008 | `branching-and-environment-protection` | Accepted |
 | 0009 | `bootstrap-iam-hardening` | Accepted |
 | 0010 | `local-verification-with-moto` | Accepted |
+| 0011 | `iam-naming-convention` | Accepted |
+| 0012 | `immutable-oidc-subjects` | Accepted |
+| 0013 | `terraform-workflow-structure` | Accepted |
+| 0014 | `p1-network-and-keys` | Accepted |
+| 0015 | `p2-database` | Accepted |
+| 0016 | `db-instance-class-and-failure-logs` | Accepted |
+| 0017 | `p3-storage-and-ingress` | Accepted |
+| 0018 | `group-stickiness-on-weighted-forwards` | Accepted |
+| 0019 | `parameter-group-apply-method` | Accepted |
+| 0020 | `p5-observability-and-contract` | Accepted |
+| 0021 | `p4-security-services` | Accepted |
+| 0022 | `adopt-the-accounts-existing-security-services` | Accepted |
+| 0023 | `carrier-event-simulator` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 

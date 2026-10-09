@@ -306,12 +306,12 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
   - `ALTER DEFAULT PRIVILEGES FOR ROLE shiptrack_migrator IN SCHEMA shiptrack GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO shiptrack_app` (and `USAGE, SELECT` on sequences)
   - Enables `pgcrypto` only if required (`gen_random_uuid()` is built in on PG 13+).
 - **`db/RUNBOOK-db-bootstrap.md`**:
-  1. Execute from an **AWS CloudShell VPC environment** in a private-app subnet with `shiptrack-db-client` attached, so no bastion host is needed.
+  1. Execute from an **AWS CloudShell VPC environment** in a private-app subnet with `shiptrack-db-client` attached, so no bastion host is needed, or, where CloudShell is not available, from a legacy host through the legacy `db-bootstrap` workflow (legacy ADR-0011).
   2. Fetch the master and app passwords from Secrets Manager into shell variables.
   3. Run `psql "sslmode=verify-full" -v … -f bootstrap.sql`.
   4. Verify roles and grants.
   5. Clear shell history.
-- **DB access from workflows:** GitHub-hosted runners cannot reach the private RDS instance. The first `bootstrap.sql` run is the only manual DB step (CloudShell, above). Every later workflow that needs the database (evidence queries, `simulator verify`) runs on a host inside the VPC through an SSM Run Command document that a workflow dispatches: a legacy host while the legacy ASG exists (legacy §7.6), then a one-shot Kubernetes Job (modern §11.3). Pipelines never open the database to the internet.
+- **DB access from workflows:** GitHub-hosted runners cannot reach the private RDS instance. The first `bootstrap.sql` run is the only manual DB step (above). Every later workflow that needs the database (evidence queries, `simulator verify`) runs on a host inside the VPC through an SSM Run Command document that a workflow dispatches: a legacy host while the legacy ASG exists (legacy §7.6), then a one-shot Kubernetes Job (modern §11.3). Pipelines never open the database to the internet.
 - **Connection budget:** publish `/shiptrack/platform/db_max_connections` with the expected `max_connections` (about 400 on `db.t4g.medium`; **[VERIFY with `SHOW max_connections`]**). Consumers must keep their combined pool ceilings at or below 60% of this value.
 
 ### 6.5 Storage (`modules/storage`)

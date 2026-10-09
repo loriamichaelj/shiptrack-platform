@@ -5,8 +5,17 @@ the `shiptrack` database, the `shiptrack_migrator` and `shiptrack_app` roles, an
 schema. It is the only manual database step. It is safe to run again, and running it again with new
 secret values is how a rotated password reaches the database.
 
-The database is private, and GitHub-hosted runners cannot reach it. Run this from an AWS CloudShell
-VPC environment, so no bastion host is needed.
+The database is private, and GitHub-hosted runners cannot reach it. There are two ways to run it:
+
+- **The `db-bootstrap` workflow in `shiptrack-legacy`** (the route used in this account, which has no
+  CloudShell). It dispatches an SSM document to one legacy host, which fetches this repository's
+  `db/bootstrap.sql` at a commit the workflow pins and checks against a SHA-256, reads the three
+  secrets itself, and runs the SQL. Nothing secret passes through the workflow. See legacy ADR-0011.
+  Run it after the first legacy `terraform-apply` and before the first deploy.
+- **An AWS CloudShell VPC environment**, below, where CloudShell is available. No bastion host is
+  needed.
+
+Both run the same SQL and end with the same checks.
 
 Variables used below. Set them to your values; none of them belong in a committed file.
 
