@@ -1,0 +1,51 @@
+name: inspect-account
+
+# Lists which account-level security services already exist, by name and status, so Terraform can
+# adopt them instead of failing on "already exists". It runs with the read-only plan role and prints
+# no ARNs and no account IDs (the account ID is masked, and any bucket name that contains it is
+# masked with it).
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/inspect-account.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Inspect
+        run: |
+          account=$(aws sts get-caller-identity --query Account --output text)
+          echo "::add-mask::$account"
+          echo "== AWS Config recorders (name, records all supported types)"
+          aws configservice describe-configuration-recorders \
+            --query 'ConfigurationRecorders[].[name, recordingGroup.allSupported]' --output text || true
+          echo "== AWS Config recorder status (name, recording)"
+          aws configservice describe-configuration-recorder-status \
+            --query 'ConfigurationRecordersStatus[].[name, recording]' --output text || true
+          echo "== AWS Config delivery channels (name, bucket)"
+          aws configservice describe-delivery-channels \
+            --query 'DeliveryChannels[].[name, s3BucketName, s3KeyPrefix]' --output text || true
+          echo "== IAM Access Analyzer analyzers (name, type, status)"
+          aws accessanalyzer list-analyzers \
+            --query 'analyzers[].[name, type, status]' --output text || true
+          echo "== Inspector (status, EC2, ECR)"
+          aws inspector2 batch-get-account-status \
+            --query 'accounts[].[state.status, resourceState.ec2.status, resourceState.ecr.status]' --output text || true
+          echo "== Security Hub CSPM"
+          if aws securityhub describe-hub >/dev/null 2>&1; then echo "enabled"; else echo "not enabled"; fi
+          echo "== GuardDuty detectors"
+          aws guardduty list-detectors --query 'length(DetectorIds)' --output text || true
