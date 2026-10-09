@@ -29,9 +29,15 @@ done
 
 docker cp "$here/bootstrap.sql" "$name:/tmp/bootstrap.sql"
 
+# The RDS master is not a superuser: it can create roles and databases, and nothing more. The script
+# is run as such a role, because a superuser would hide a statement that is out of order (the grant of
+# the migrator role must come before the database it owns is created).
+docker exec "$name" psql -U postgres -q -c "CREATE ROLE rdsmaster LOGIN CREATEROLE CREATEDB PASSWORD 'master-test-only'"
+host=$(docker exec "$name" hostname -i | awk '{print $1}')
+
 run_bootstrap() {
-  docker exec "$name" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q \
-    -v migrator_password="$1" -v app_password="$2" -f /tmp/bootstrap.sql >/dev/null
+  docker exec -e PGPASSWORD=master-test-only "$name" psql -h "$host" -U rdsmaster -d postgres \
+    -v ON_ERROR_STOP=1 -q -v migrator_password="$1" -v app_password="$2" -f /tmp/bootstrap.sql >/dev/null
 }
 sql() { docker exec "$name" psql -U postgres -d "${2:-shiptrack}" -tAc "$1"; }
 
@@ -43,6 +49,7 @@ run_bootstrap migrator-pw-1 app-pw-1
 echo "== roles"
 eq "migrator can log in, limit 150" "$(sql "SELECT rolcanlogin || ':' || rolconnlimit FROM pg_roles WHERE rolname='shiptrack_migrator'" postgres)" "true:150"
 eq "app can log in, limit 200" "$(sql "SELECT rolcanlogin || ':' || rolconnlimit FROM pg_roles WHERE rolname='shiptrack_app'" postgres)" "true:200"
+eq "the master is not a superuser" "$(sql "SELECT rolsuper FROM pg_roles WHERE rolname='rdsmaster'" postgres)" "f"
 eq "neither role is a superuser" "$(sql "SELECT count(*) FROM pg_roles WHERE rolname IN ('shiptrack_migrator','shiptrack_app') AND (rolsuper OR rolcreatedb OR rolcreaterole)" postgres)" "0"
 eq "each role exists once" "$(sql "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'shiptrack\_%'" postgres)" "2"
 
@@ -61,8 +68,6 @@ SQL
 eq "the app has DML on a new table" "$(sql "SELECT string_agg(p, ',' ORDER BY p) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) p WHERE has_table_privilege('shiptrack_app','shiptrack.probe',p)")" "DELETE,INSERT,SELECT,UPDATE"
 eq "the app has no DDL on a new table" "$(sql "SELECT has_table_privilege('shiptrack_app','shiptrack.probe','TRUNCATE') OR has_table_privilege('shiptrack_app','shiptrack.probe','REFERENCES')")" "f"
 eq "the app can use a new sequence" "$(sql "SELECT has_sequence_privilege('shiptrack_app','shiptrack.probe_id_seq','USAGE')")" "t"
-
-host=$(docker exec "$name" hostname -i | awk '{print $1}')  # the image trusts 127.0.0.1, so test passwords over the container's own address
 
 echo "== a third run, after the table exists, and a password change"
 run_bootstrap migrator-pw-2 app-pw-2

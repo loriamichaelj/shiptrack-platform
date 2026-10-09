@@ -28,13 +28,14 @@ BEGIN
 END
 $$;
 
+-- The master must be able to SET ROLE to the migrator before it creates anything owned by it, and the
+-- master of an RDS instance is not a superuser. The grant is removed again at the end.
+GRANT shiptrack_migrator TO CURRENT_USER WITH SET TRUE;
+
 -- CREATE DATABASE cannot run inside a DO block or a transaction, so \gexec runs it only when missing.
 SELECT 'CREATE DATABASE shiptrack OWNER shiptrack_migrator'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'shiptrack')
 \gexec
-
--- The master needs the migrator role to own objects on its behalf. The grant is removed again at the end.
-GRANT shiptrack_migrator TO CURRENT_USER;
 
 \connect shiptrack
 
