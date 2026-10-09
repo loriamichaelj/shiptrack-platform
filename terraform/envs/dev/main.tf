@@ -58,3 +58,73 @@ module "ingress" {
   hosted_zone_name      = var.hosted_zone_name
   enable_waf            = var.enable_waf
 }
+
+# --- Values owned by bootstrap, read by data source ---------------------------------------------
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+data "aws_iam_policy" "workload_boundary" {
+  name = "${var.role_prefix}-workload-boundary"
+}
+
+data "aws_s3_bucket" "state" {
+  bucket = "shiptrack-tfstate-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.region}"
+}
+
+locals {
+  # The alarm descriptions link to the cutover runbook (written in P8), one anchor per alarm.
+  runbook_url = "https://github.com/${var.owner}/shiptrack-platform/blob/dev/docs/runbooks/cutover.md"
+}
+
+module "observability" {
+  source = "../../modules/observability"
+
+  logs_key_arn   = module.kms.logs_key_arn
+  alert_emails   = var.alert_emails
+  runbook_url    = local.runbook_url
+  alb_arn_suffix = module.ingress.alb_arn_suffix
+  target_groups = {
+    legacy = module.ingress.tg_legacy_arn_suffix
+    modern = module.ingress.tg_modern_arn_suffix
+  }
+  db_instance_id     = module.database.instance_id
+  db_max_connections = module.database.max_connections
+  cutover            = var.cutover
+}
+
+module "contract" {
+  source = "../../modules/contract"
+
+  contract = {
+    vpc_id                  = module.network.vpc_id
+    vpc_cidr                = module.network.vpc_cidr
+    public_subnet_ids       = module.network.public_subnet_ids
+    private_app_subnet_ids  = module.network.private_app_subnet_ids
+    private_data_subnet_ids = module.network.private_data_subnet_ids
+    sg_alb_id               = module.network.sg_alb_id
+    sg_db_client_id         = module.network.sg_db_client_id
+    alb_arn                 = module.ingress.alb_arn
+    alb_dns_name            = module.ingress.alb_dns_name
+    listener_arn            = module.ingress.listener_arn
+    tg_legacy_arn           = module.ingress.tg_legacy_arn
+    tg_modern_arn           = module.ingress.tg_modern_arn
+    base_url                = module.ingress.base_url
+    rds_endpoint            = module.database.endpoint
+    rds_port                = tostring(module.database.port)
+    db_name                 = module.database.db_name
+    db_max_connections      = tostring(module.database.max_connections)
+    db_app_secret_arn       = module.database.app_secret_arn
+    db_migrator_secret_arn  = module.database.migrator_secret_arn
+    kms_data_key_arn        = module.kms.data_key_arn
+    kms_secrets_key_arn     = module.kms.secrets_key_arn
+    kms_logs_key_arn        = module.kms.logs_key_arn
+    pod_bucket_name         = module.storage.pod_bucket_name
+    pod_bucket_arn          = module.storage.pod_bucket_arn
+    sns_sev1_arn            = module.observability.sns_sev1_arn
+    sns_sev2_arn            = module.observability.sns_sev2_arn
+    permission_boundary_arn = data.aws_iam_policy.workload_boundary.arn
+    test_token_secret_arn   = module.ingress.test_token_secret_arn
+    state_bucket_name       = data.aws_s3_bucket.state.id
+  }
+}

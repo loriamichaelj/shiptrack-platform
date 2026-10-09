@@ -160,3 +160,9 @@ variable "enable_waf" {
   type        = bool
   default     = false
 }
+
+variable "alert_emails" {
+  description = "Comma-separated addresses for the SEV1 and SEV2 alert topics. The workflows supply them from the ALERT_EMAILS repository variable; each recipient must confirm by hand."
+  type        = string
+  default     = ""
+}

@@ -134,3 +134,23 @@ output "test_token_secret_arn" {
   description = "ARN of the secret that holds the test-routing token."
   value       = module.ingress.test_token_secret_arn
 }
+
+output "sns_sev1_arn" {
+  description = "ARN of the SEV1 alert topic."
+  value       = module.observability.sns_sev1_arn
+}
+
+output "sns_sev2_arn" {
+  description = "ARN of the SEV2 alert topic."
+  value       = module.observability.sns_sev2_arn
+}
+
+output "cutover_dashboard" {
+  description = "Name of the cutover dashboard."
+  value       = module.observability.dashboard_name
+}
+
+output "contract_parameters" {
+  description = "Names of the SSM parameters in the contract."
+  value       = module.contract.parameter_names
+}

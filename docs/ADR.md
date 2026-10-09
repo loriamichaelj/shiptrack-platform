@@ -235,3 +235,17 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** `rds.force_ssl` is set with `apply_method = "pending-reboot"`. It is a static parameter, so AWS reports that method on read, and the provider's default of `immediate` never matched. The plan summary keeps the changed-attribute names for updates (values are never printed).
 
 **Consequences:** The plan is clean for the parameter group, so the nightly drift check (P6b) will not report it. The value stays 1, so the running instance is not affected; a future change to the value takes effect at the next reboot.
+
+## ADR-0020: p5-observability-and-contract
+
+**Status:** Accepted
+
+**Context:** P5 creates the alert topics, alarms, dashboard, and the SSM contract the other two repositories read. The design names a runbook URL for every alarm, but the runbooks are written after the builds (P8).
+
+**Decision:**
+- Every alarm description is `owner: platform | severity: SEVn | runbook: <URL>#<alarm> | <what it means>`. All URLs point at `docs/runbooks/cutover.md` on `dev` in this repository, with the alarm name as the anchor; P8 writes a section for each anchor. The owner of the repository comes from the `owner` variable, so no organisation name is committed.
+- Alert email addresses come from the optional `ALERT_EMAILS` repository variable as one comma-separated string, because an unset variable reaches Terraform as an empty string and would break a list-typed variable. Subscriptions are keyed by position so the plan summary and the PR comment never show an address. Each recipient must still confirm by hand.
+- The `contract` module takes one object with an attribute per design §6.9 key, so a missing key is a plan-time error and a partial contract cannot be published. The permission boundary and the state bucket are read by data source because bootstrap owns them. The three subnet lists are `StringList` parameters; nothing is a `SecureString`, because only identifiers and ARNs are published.
+- The security-services topics (`sev2` accepting EventBridge) are in place; the rule that sends Security Hub findings to it is part of P4.
+
+**Consequences:** Until P8, the runbook links lead to a page without those sections. The EventBridge statement in the `sev2` topic policy is built from a policy document and is exercised by the first apply, not by the offline tests. The alarms use `notBreaching` for missing data, so a target group with no traffic stays quiet.
