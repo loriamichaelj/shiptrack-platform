@@ -101,6 +101,18 @@ resource "aws_guardduty_detector_feature" "runtime" {
     name   = "EKS_ADDON_MANAGEMENT"
     status = var.enable_guardduty_runtime ? "ENABLED" : "DISABLED"
   }
+
+  # AWS reports all three agent-management settings for this feature, so all three are stated;
+  # leaving two out makes every plan show a difference. Only EKS is used here.
+  additional_configuration {
+    name   = "ECS_FARGATE_AGENT_MANAGEMENT"
+    status = "DISABLED"
+  }
+
+  additional_configuration {
+    name   = "EC2_AGENT_MANAGEMENT"
+    status = "DISABLED"
+  }
 }
 
 # --- AWS Config ----------------------------------------------------------------------------------

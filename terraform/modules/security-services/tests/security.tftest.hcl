@@ -72,8 +72,11 @@ run "guardduty_features" {
       aws_guardduty_detector_feature.rds_login_events.status == "ENABLED",
       aws_guardduty_detector_feature.runtime.name == "RUNTIME_MONITORING",
       aws_guardduty_detector_feature.runtime.status == "ENABLED",
-      one(aws_guardduty_detector_feature.runtime.additional_configuration).name == "EKS_ADDON_MANAGEMENT",
-      one(aws_guardduty_detector_feature.runtime.additional_configuration).status == "ENABLED",
+      { for c in aws_guardduty_detector_feature.runtime.additional_configuration : c.name => c.status } == {
+        EKS_ADDON_MANAGEMENT         = "ENABLED"
+        ECS_FARGATE_AGENT_MANAGEMENT = "DISABLED"
+        EC2_AGENT_MANAGEMENT         = "DISABLED"
+      },
     ])
     error_message = "S3, EKS audit, RDS login, and Runtime Monitoring with automated EKS agent management."
   }
@@ -89,7 +92,7 @@ run "runtime_monitoring_can_be_turned_off" {
   assert {
     condition = alltrue([
       aws_guardduty_detector_feature.runtime.status == "DISABLED",
-      one(aws_guardduty_detector_feature.runtime.additional_configuration).status == "DISABLED",
+      alltrue([for c in aws_guardduty_detector_feature.runtime.additional_configuration : c.status == "DISABLED"]),
     ])
     error_message = "enable_guardduty_runtime = false turns the feature and its agent management off."
   }
