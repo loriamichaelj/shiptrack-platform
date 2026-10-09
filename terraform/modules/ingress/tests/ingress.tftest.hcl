@@ -136,16 +136,30 @@ run "header_rules_need_the_target_and_the_token" {
   }
 }
 
-run "ui_rule_is_sticky_and_the_api_rule_is_not" {
+# AWS refuses a weighted forward to a target group with target stickiness unless the forward also
+# has group stickiness (the legacy group has it, AP-05). The UI keeps the long duration; the API and
+# default actions use the shortest, so clients re-roll between stacks almost every request.
+run "every_weighted_forward_has_group_stickiness" {
   command = apply
 
   assert {
     condition = alltrue([
       one(one(one(aws_lb_listener_rule.ui.action).forward).stickiness).enabled,
       one(one(one(aws_lb_listener_rule.ui.action).forward).stickiness).duration == 3600,
-      length(one(one(aws_lb_listener_rule.track.action).forward).stickiness) == 0,
+      one(one(one(aws_lb_listener_rule.track.action).forward).stickiness).enabled,
+      one(one(one(aws_lb_listener_rule.track.action).forward).stickiness).duration == 1,
+      one(one(one(aws_lb_listener.http.default_action).forward).stickiness).enabled,
+      one(one(one(aws_lb_listener.http.default_action).forward).stickiness).duration == 1,
     ])
-    error_message = "Only the UI rule uses group-level stickiness."
+    error_message = "Each weighted forward needs group stickiness: 3600 s for the UI, 1 s for the API and default."
+  }
+
+  assert {
+    condition = alltrue([
+      for r in [aws_lb_listener_rule.test_legacy, aws_lb_listener_rule.test_modern] :
+      length(one(r.action).forward) == 0
+    ])
+    error_message = "The header rules forward to one target group and need no group stickiness."
   }
 
   assert {
@@ -232,6 +246,27 @@ run "rejects_an_oversize_weight" {
   }
 
   expect_failures = [var.cutover]
+}
+
+run "the_https_default_action_also_has_group_stickiness" {
+  command = plan
+
+  variables {
+    domain_name = "shiptrack.example.com"
+  }
+
+  override_data {
+    target = data.aws_route53_zone.this[0]
+    values = { zone_id = "Z0000000000001" }
+  }
+
+  assert {
+    condition = alltrue([
+      one(one(one(aws_lb_listener.https[0].default_action).forward).stickiness).enabled,
+      one(one(one(aws_lb_listener.https[0].default_action).forward).stickiness).duration == 1,
+    ])
+    error_message = "The HTTPS default action is a weighted forward and needs group stickiness."
+  }
 }
 
 run "a_domain_adds_tls_and_a_redirect" {

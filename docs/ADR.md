@@ -215,3 +215,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - Module tests cover the rule priorities, the header conditions, UI-only stickiness, and that moving `cutover.track` leaves the default action, the ALB, and the header rules unchanged.
 
 **Consequences:** The ALB is internet-facing over plain HTTP until a domain is set (R-01). Deletion protection is on, so removing the ALB takes two steps. The test-routing token is in state and in the listener rules (R-04).
+
+## ADR-0018: group-stickiness-on-weighted-forwards
+
+**Status:** Accepted
+
+**Context:** Design §6.6 puts group-level stickiness on the UI rule only and leaves it off elsewhere, so a weight change moves traffic at once. The first ingress apply failed at the listener: AWS rejects a forward to several target groups when one of them has target stickiness, unless the forward also has group stickiness. The legacy target group has target stickiness by design (AP-05), so the default action and the API rule (priority 100) both failed that check. The header rules forward to one group and are not affected.
+
+**Decision:** Group stickiness is enabled on the default action and on the track rule for `var.api_stickiness_seconds`, default 1 second, the shortest AWS allows. The UI rule keeps `var.ui_stickiness_seconds` (3600). Dropping the target stickiness on the legacy group was rejected because AP-05 is a requirement. A longer duration was rejected because a weight change would then reach existing clients only as their cookies expire.
+
+**Consequences:** A client is re-rolled between stacks on almost every request, so canary statistics stay per-request and a cutover takes effect at once, as the design intends. The legacy group's own 24-hour cookie still pins a client to one instance within legacy. Because group stickiness is on, a request carries the group-stickiness cookie; a client that ignores cookies is unaffected, since the cookie only prefers a group.
