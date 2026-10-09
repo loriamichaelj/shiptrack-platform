@@ -27,12 +27,13 @@ account=$(aws sts get-caller-identity --query Account --output text)
 echo "::add-mask::$account"
 bucket="shiptrack-tfstate-${account}-${AWS_REGION}"
 
-# Run a terraform command quietly; show its output only if it fails, with the account masked.
+# Run a terraform command quietly; show its output only if it fails, with the account and the
+# resource IDs masked (the logs of a public repository are public).
 quietly() {
   local out
   out=$(mktemp)
   if ! "$@" >"$out" 2>&1; then
-    sed "s/${account}/***/g" "$out" >&2
+    sed -E "s/${account}/***/g; s/\[id=[^]]*\]/[id=***]/g; s/(vpc|subnet|sg|rtb|igw|eipalloc|nat|vpce|eni|acl|rtbassoc)-[0-9a-f]{8,17}/\1-***/g" "$out" >&2
     rm -f "$out"
     return 1
   fi
