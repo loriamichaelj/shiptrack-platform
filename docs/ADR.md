@@ -280,3 +280,19 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - `.github/workflows/inspect-account.yml` stays as a read-only diagnostic that lists these services by name and status, without ARNs or account IDs.
 
 **Consequences:** The Config setup that existed before this project is changed. The old `config-bucket-*` bucket is left as it is. A fresh account without these services needs the defaults (`shiptrack-recorder`, `shiptrack-delivery`, `manage_access_analyzer = true`) and no import blocks.
+
+## ADR-0023: carrier-event-simulator
+
+**Status:** Accepted
+
+**Context:** Legacy and modern need the same realistic traffic to be compared, and AP-06 (events lost when the in-process queue is lost) needs a record of what was accepted.
+
+**Decision:**
+- The simulator is a seeded plan generator, an async runner, and a ledger, with the rates in design §6.10: 1% duplicate events, 2% out-of-order events, 1% exception paths, and 5% of shipments created already late. The same seed plans the same run.
+- Only events the API answered with 202 are written to the ledger, one line each, as they are accepted and flushed at once, so a crash loses nothing. A repeated key is written once.
+- It uploads a proof of delivery on each delivery and never reads one back, because an upload and its read-back must reach one stack and weighted routing could split them.
+- `verify` imports only `psycopg` and nothing else, so the wheel is installed on a host with `--no-deps` and uses the release virtualenv's `psycopg`. Running the simulator needs `httpx`; running `verify` does not.
+- The simulator is consumed by the other repositories by checking this one out at a pinned commit; the repository is public, so no token is needed.
+
+**Consequences:** A run writes real shipments and events into the target's database, so it is run deliberately. The ledger holds shipment IDs and tracking numbers, so it stays on the runner or in the private artifact bucket and is not committed.
+

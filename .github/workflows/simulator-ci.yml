@@ -1,0 +1,41 @@
+name: simulator-ci
+
+# Checks the carrier event simulator: lint, tests, and that the wheel builds. None of it needs AWS,
+# so it also runs for pull requests from forks.
+
+on:
+  pull_request:
+    paths:
+      - "validation/simulator/**"
+      - ".github/workflows/simulator-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: simulator-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.22"
+
+jobs:
+  simulator:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: validation/simulator
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen pytest -q
+      - name: The wheel builds
+        run: uv build --wheel
