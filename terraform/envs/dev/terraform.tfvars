@@ -11,7 +11,7 @@ allowed_ingress_cidrs      = ["0.0.0.0/0"]
 enable_tls                 = false
 
 db_engine_version        = "17.10"
-db_instance_class        = "db.t4g.medium"
+db_instance_class        = "db.t3.medium"
 db_allocated_storage     = 50
 db_max_allocated_storage = 200
 db_multi_az              = false
