@@ -117,8 +117,11 @@ Default region is the `aws_region` variable (default `us-east-1`).
 ```
 shiptrack-platform/
 ├── bootstrap/                    # Applied only by bootstrap-apply.yml (seed role, §6.1)
-│   ├── main.tf  variables.tf  outputs.tf  versions.tf
-│   ├── policies/                 # JSON/HCL policy documents per role
+│   ├── main.tf  variables.tf  outputs.tf  versions.tf  .terraform.lock.hcl
+│   ├── state/                    # Module: state bucket and its key
+│   ├── policies/                 # Module: boundary, trust policies, and each role's permissions
+│   ├── scripts/                  # ci.sh (plan/apply, first-run seeding), github-setup.sh
+│   ├── tests/moto.sh             # Runs ci.sh against a local moto server
 │   └── README.md                 # Manual seed steps + workflow procedure
 ├── terraform/
 │   ├── modules/
@@ -171,15 +174,15 @@ Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a sta
 
 **Manual prerequisites (a human, once; documented in `bootstrap/README.md`):**
 1. In the AWS account, create the GitHub OIDC provider (values below).
-2. Create IAM role `shiptrack-bootstrap` with trust `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and `:sub = repo:<org>/shiptrack-platform:environment:bootstrap`. Attach `AdministratorAccess` initially, because bootstrap creates IAM roles, the permission boundary, and KMS keys. Narrowing or retiring it is tracked as risk R-10.
+2. Create IAM role `<SEED>` (§8) with trust `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and `:sub = repo:<org>/shiptrack-platform:environment:bootstrap`. Attach `AdministratorAccess` initially, because bootstrap creates IAM roles, the permission boundary, and KMS keys. Narrowing or retiring it is tracked as risk R-10.
 3. In GitHub, on **each of the three repos**: create environment `dev` (and `bootstrap` on `shiptrack-platform`) with required reviewers and deployment branches limited to `dev`; protect `dev` so changes arrive by pull request; enable "Require approval for all outside collaborators" (§6.12).
-4. On `shiptrack-platform`, set the seed role ARN as a secret and the region as a variable. After the first bootstrap run, set each repo's role ARNs as **secrets** (GitHub masks them in logs; variables are not masked). `bootstrap/README.md` lists the `gh` commands.
+4. On `shiptrack-platform`, set the seed role ARN as a secret, and the region, `ROLE_PREFIX`, and `SEED_ROLE_NAME` as variables. After the first bootstrap run, set each repo's role ARNs as **secrets** (GitHub masks them in logs; variables are not masked). `bootstrap/README.md` lists the `gh` commands.
 
 Terraform does **not** manage the OIDC provider or the seed role. It reads the provider with `data "aws_iam_openid_connect_provider"`. Keeping the seed role manual means the pipeline cannot modify its own foundation.
 
-**`bootstrap-apply.yml`** (`workflow_dispatch`): jobs `plan` and `apply`, both with `environment: bootstrap`. The second approval is the review of the plan summary (§6.12) printed by the first job. `bootstrap/` has no committed backend block. The workflow checks whether the state bucket exists (`head-bucket`):
-- **First run:** apply with local state, then generate `backend_override.tf` (never committed) and run `terraform init -migrate-state -force-copy` in the same job.
-- **Later runs:** write the override first and initialize against S3.
+**`bootstrap-apply.yml`** (`workflow_dispatch`): jobs `plan` and `apply`, both with `environment: bootstrap`, running `bootstrap/scripts/ci.sh`. The second approval is the review of the plan summary (§6.12) printed by the first job. `bootstrap/` has no committed backend block. The script checks whether the state bucket exists (`head-bucket`):
+- **First run:** create only the bucket, with local state; generate `backend.tf` (git-ignored) and run `terraform init -migrate-state -force-copy` in the same job; then plan and apply everything else with remote state. Keeping the local-state step to one resource keeps the window in which state could be lost as small as possible.
+- **Later runs:** write `backend.tf` first and initialize against S3.
 
 Apply uses a fresh plan from the same job. No plan file is uploaded as an artifact.
 
@@ -198,13 +201,13 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
 | `modern/cluster/dev.tfstate` | modern (cluster root) |
 | `modern/addons/dev.tfstate` | modern (addons root) |
 
-- Bootstrap's own state starts local inside the first `bootstrap-apply.yml` run and is migrated into the bucket in that same job. `bootstrap/README.md` documents the procedure and the recovery if the migration step fails.
+- Bootstrap's own state starts local inside the first `bootstrap-apply.yml` run and is migrated into the bucket in that same job, before anything else is created. `bootstrap/README.md` documents the procedure and the recovery if the migration step fails.
 
 **GitHub OIDC provider:** created manually (prerequisite 1): URL `https://token.actions.githubusercontent.com`, client ID `sts.amazonaws.com`. Omit the thumbprint if the console allows it, since AWS no longer validates the GitHub thumbprint **[VERIFY]**. Only one provider per URL can exist in an account, which is why Terraform reads it by data source instead of creating it.
 
-**Workload permission boundary** `shiptrack-workload-boundary` (managed policy)
+**Workload permission boundary** `<PREFIX>-workload-boundary` (managed policy)
 - Attached to **every** IAM role created by the legacy and modern pipelines
-- Allows only the service namespaces ShipTrack workloads and controllers need: `ec2`, `autoscaling`, `elasticloadbalancing`, `eks`, `eks-auth`, `ecr`, `sqs`, `events`, `s3`, `secretsmanager`, `kms`, `ssm`, `ssmmessages`, `ec2messages`, `cloudwatch`, `logs`, `aps`, `xray`, `sts`, `pricing`, `tag`, `acm`, `cognito-idp`, `wafv2`, `waf-regional`, `shield` (the last four appear as read/associate actions in the vendored AWS Load Balancer Controller policy). IAM is limited to `Get*`/`List*`, `iam:PassRole` on `role/shiptrack-*`, and instance-profile actions (`Create`/`Delete`/`Tag`/`AddRoleTo`/`RemoveRoleFrom` `InstanceProfile`) on `instance-profile/*`, because Karpenter creates instance profiles at runtime.
+- Allows only the service namespaces ShipTrack workloads and controllers need: `ec2`, `autoscaling`, `elasticloadbalancing`, `eks`, `eks-auth`, `ecr`, `sqs`, `events`, `s3`, `secretsmanager`, `kms`, `ssm`, `ssmmessages`, `ec2messages`, `cloudwatch`, `logs`, `aps`, `xray`, `sts`, `pricing`, `tag`, `acm`, `cognito-idp`, `wafv2`, `waf-regional`, `shield` (the last four appear as read/associate actions in the vendored AWS Load Balancer Controller policy). IAM is limited to `Get*`/`List*`, `iam:PassRole` on `role/<PREFIX>-*`, and instance-profile actions (`Create`/`Delete`/`Tag`/`AddRoleTo`/`RemoveRoleFrom` `InstanceProfile`) on `instance-profile/*`, because Karpenter creates instance profiles at runtime.
 - **Gotcha:** a boundary is an intersection with the role's own policy. An action missing here makes the LBC or Karpenter controller fail at runtime with `AccessDenied`, not at apply time. Add a test that diffs the boundary against every policy attached to a role that carries it: the vendored LBC and Karpenter controller policies, and the managed or vendored policies for the EKS cluster and node-group roles, VPC CNI, the CloudWatch observability add-on, KEDA, and Grafana (`aps`). Actions a policy needs that the boundary excludes (for example `iam:CreateServiceLinkedRole` in `AmazonEKSClusterPolicy`) must be satisfied out of band: the apply roles create the required service-linked roles before the controllers need them.
 - Explicitly denies:
   - Modifying or deleting CloudTrail, GuardDuty, Config, Security Hub, Inspector, and Access Analyzer
@@ -220,17 +223,17 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
 
 | Role | `sub` condition | Permissions summary |
 |---|---|---|
-| `shiptrack-platform-plan` | `…/shiptrack-platform:pull_request` **or** `…:ref:refs/heads/dev` (drift + validation workflows) | `ReadOnlyAccess`; state read; `PutObject`/`DeleteObject` on `platform/*.tflock`; KMS decrypt on the state key; `secretsmanager:GetSecretValue` on the test-routing token (§6.6) and, because refreshing `aws_secretsmanager_secret_version` reads the value, on `shiptrack/dev/db/*`, plus `kms:Decrypt` on `shiptrack-secrets` conditioned on `kms:ViaService` **[VERIFY: whether the provider still calls `GetSecretValue` on refresh when write-only arguments are used; drop the DB-secret grants if not]** |
-| `shiptrack-platform-apply` | `…/shiptrack-platform:environment:dev` | `PowerUserAccess` (includes `iam:CreateServiceLinkedRole`) + IAM write limited to `shiptrack-*` roles/policies; state read/write |
-| `shiptrack-legacy-plan` | `…/shiptrack-legacy:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + legacy state/lock (`.tflock` writes, state-key KMS decrypt); `secretsmanager:GetSecretValue` on the test-routing token (`assess.yml` k6 runs) |
-| `shiptrack-legacy-apply` | `…/shiptrack-legacy:environment:dev` | EC2/ASG/SSM/S3/Logs/CloudWatch for `shiptrack-legacy-*`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` only with `iam:PermissionsBoundary` = boundary ARN and name `shiptrack-legacy-*`; `iam:PassRole` to `shiptrack-legacy-*`; instance-profile create/delete/tag/add-role actions on `instance-profile/shiptrack-legacy-*`; use of the platform logs key (conditioned on `kms:ViaService = logs.<region>.amazonaws.com`) so log groups can be encrypted |
-| `shiptrack-legacy-deploy` | `…/shiptrack-legacy:environment:dev` | `s3:PutObject` to the artifact bucket; `ssm:SendCommand` limited to `ShipTrack-*` documents and instances tagged `Stack=legacy`; `ssm:GetCommandInvocation`/`ListCommandInvocations`; `autoscaling:DescribeAutoScalingGroups`, `ec2:DescribeInstances`; `ssm:GetParameter(s)` on `/shiptrack/*`; `ssm:PutParameter` on `/shiptrack/legacy/current_release`; `secretsmanager:GetSecretValue` on the test-routing token |
-| `shiptrack-modern-plan` | `…/shiptrack-modern:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + modern state/locks (EKS view access entry is granted in the modern repo) |
-| `shiptrack-modern-apply` | `…/shiptrack-modern:environment:dev` | EKS/EC2/ECR/SQS/Events/APS/Logs/CloudWatch/SSM, KMS key creation (`alias/shiptrack-eks`); `iam:CreateServiceLinkedRole`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` boundary-conditioned, name `shiptrack-modern-*`; `iam:PassRole` to `shiptrack-modern-*` |
-| `shiptrack-modern-release` | `…/shiptrack-modern:ref:refs/heads/dev` | ECR push/pull on `shiptrack/app` only (`ecr:GetAuthorizationToken`, `BatchCheckLayerAvailability`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`, `PutImage`, `BatchGetImage`, `GetDownloadUrlForLayer`) |
-| `shiptrack-modern-deploy` | `…/shiptrack-modern:environment:dev` | `eks:DescribeCluster`; `ssm:GetParameter(s)` on `/shiptrack/*`; `secretsmanager:GetSecretValue` on the test-routing token. Kubernetes permissions come from an EKS access entry plus namespace RBAC (modern repo) |
+| `<PREFIX>-platform-plan` | `…/shiptrack-platform:pull_request` **or** `…:ref:refs/heads/dev` (drift + validation workflows) | `ReadOnlyAccess`; state read; `PutObject`/`DeleteObject` on `platform/*.tflock`; KMS decrypt on the state key; `secretsmanager:GetSecretValue` on the test-routing token (§6.6) and, because refreshing `aws_secretsmanager_secret_version` reads the value, on `shiptrack/dev/db/*`, plus `kms:Decrypt` on `shiptrack-secrets` conditioned on `kms:ViaService` **[VERIFY: whether the provider still calls `GetSecretValue` on refresh when write-only arguments are used; drop the DB-secret grants if not]** |
+| `<PREFIX>-platform-apply` | `…/shiptrack-platform:environment:dev` | `PowerUserAccess` (includes `iam:CreateServiceLinkedRole`) + IAM write limited to `<PREFIX>-*` roles, policies, and instance profiles; state read/write |
+| `<PREFIX>-legacy-plan` | `…/shiptrack-legacy:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + legacy state/lock (`.tflock` writes, state-key KMS decrypt); `secretsmanager:GetSecretValue` on the test-routing token (`assess.yml` k6 runs) |
+| `<PREFIX>-legacy-apply` | `…/shiptrack-legacy:environment:dev` | EC2/ASG/SSM/S3/Logs/CloudWatch for `shiptrack-legacy-*`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` only with `iam:PermissionsBoundary` = boundary ARN and name `<PREFIX>-legacy-*`; `iam:PassRole` to `<PREFIX>-legacy-*`; instance-profile create/delete/tag/add-role actions on `instance-profile/<PREFIX>-legacy-*`; use of the platform logs key (conditioned on `kms:ViaService = logs.<region>.amazonaws.com`) so log groups can be encrypted |
+| `<PREFIX>-legacy-deploy` | `…/shiptrack-legacy:environment:dev` | `s3:PutObject` to the artifact bucket; `ssm:SendCommand` limited to `ShipTrack-*` documents and instances tagged `Stack=legacy`; `ssm:GetCommandInvocation`/`ListCommandInvocations`; `autoscaling:DescribeAutoScalingGroups`, `ec2:DescribeInstances`; `ssm:GetParameter(s)` on `/shiptrack/*`; `ssm:PutParameter` on `/shiptrack/legacy/current_release`; `secretsmanager:GetSecretValue` on the test-routing token |
+| `<PREFIX>-modern-plan` | `…/shiptrack-modern:pull_request` **or** `…:ref:refs/heads/dev` | Read-only + modern state/locks (EKS view access entry is granted in the modern repo) |
+| `<PREFIX>-modern-apply` | `…/shiptrack-modern:environment:dev` | EKS/EC2/ECR/SQS/Events/APS/Logs/CloudWatch/SSM, KMS key creation (`alias/shiptrack-eks`); `iam:CreateServiceLinkedRole`; `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy` boundary-conditioned, name `<PREFIX>-modern-*`; `iam:PassRole` to `<PREFIX>-modern-*` |
+| `<PREFIX>-modern-release` | `…/shiptrack-modern:ref:refs/heads/dev` | ECR push/pull on `shiptrack/app` only (`ecr:GetAuthorizationToken`, `BatchCheckLayerAvailability`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`, `PutImage`, `BatchGetImage`, `GetDownloadUrlForLayer`) |
+| `<PREFIX>-modern-deploy` | `…/shiptrack-modern:environment:dev` | `eks:DescribeCluster`; `ssm:GetParameter(s)` on `/shiptrack/*`; `secretsmanager:GetSecretValue` on the test-routing token. Kubernetes permissions come from an EKS access entry plus namespace RBAC (modern repo) |
 
-The org name, repo names, and environment name are variables. **Gotcha:** the plan roles must be able to write `.tflock` objects, because S3 native locking writes a lock file even during `plan`. The seed role `shiptrack-bootstrap` is a tenth role but is manual and outside this table.
+The org name, repo names, environment name, and role prefix are variables. The permissions above are the starting point: a missing action shows up as `AccessDenied` in the pipeline that needs it, and the fix is made in `bootstrap/policies/`. The platform apply role also carries explicit denies on the roles, boundary, and state that bootstrap owns, so the platform pipeline cannot rewrite its own foundation. **Gotcha:** the plan roles must be able to write `.tflock` objects, because S3 native locking writes a lock file even during `plan`. The seed role `<SEED>` is a tenth role but is manual and outside this table.
 
 ### 6.2 Network (`modules/network`)
 
@@ -527,7 +530,7 @@ These tools own the **shared definition of correct** for both stacks.
 - Every request is tagged with `target`.
 - Writes the summary JSON to `loadtest/results/<scenario>-<target>-<ts>.json`. These files are the before/after evidence.
 
-**`.github/workflows/validation.yml`** (`workflow_dispatch`): inputs are `suite` (contract-smoke | contract-full | k6-baseline) and `target`. It runs on `dev` and uses `shiptrack-platform-plan` (its trust includes `ref:refs/heads/dev`) to read `base_url` and the test token. Legacy and modern workflows consume `validation/` by checking this repository out at a pinned commit SHA; the repository is public, so no token is needed.
+**`.github/workflows/validation.yml`** (`workflow_dispatch`): inputs are `suite` (contract-smoke | contract-full | k6-baseline) and `target`. It runs on `dev` and uses `<PREFIX>-platform-plan` (its trust includes `ref:refs/heads/dev`) to read `base_url` and the test token. Legacy and modern workflows consume `validation/` by checking this repository out at a pinned commit SHA; the repository is public, so no token is needed.
 
 ### 6.11 CI/CD for this repo
 
@@ -551,7 +554,7 @@ All three repositories are public.
 
 - **No identifiers in output.** Committed files, workflow logs, PR comments, artifacts, and evidence must not contain account IDs, ARNs with account IDs, ALB DNS names, instance or host IDs, secret values, or the test-routing token. Use variables and data sources (§0.3). Set `mask-aws-account-id: true` explicitly in `configure-aws-credentials` (the action's default is `false`). Store role ARNs as GitHub secrets, not variables, so they are masked. Run `::add-mask::` on any value fetched at run time (the token) before using it. Never `echo` variables or enable `set -x` in steps that hold credentials.
 - **Plan output.** PR comments show only resource addresses and actions (from `terraform show -json`), never attribute values. Plan files are never uploaded as artifacts, because public artifacts are downloadable. Apply uses a fresh plan in the same job.
-- **Repository settings.** Branch protection on `dev` (changes arrive by pull request from short-lived branches); "Require approval for all outside collaborators" for workflows; default `GITHUB_TOKEN` permissions read-only; environments `bootstrap` and `dev` with required reviewers and deployment branches limited to `dev` (an environment job's OIDC `sub` carries no branch, so this is what keeps other branches from requesting apply roles); secret scanning and push protection on. Fork PRs receive no OIDC token, so the plan roles are unreachable from forks.
+- **Repository settings** (applied by `bootstrap/scripts/github-setup.sh`). Branch protection on `dev` (changes arrive by pull request from short-lived branches); "Require approval for all outside collaborators" for workflows; default `GITHUB_TOKEN` permissions read-only; environments `bootstrap` and `dev` with required reviewers and deployment branches limited to `dev` (an environment job's OIDC `sub` carries no branch, so this is what keeps other branches from requesting apply roles); secret scanning and push protection on. Fork PRs receive no OIDC token, so the plan roles are unreachable from forks.
 - **Evidence and screenshots** committed under `docs/` are scrubbed with placeholders (`<ACCOUNT_ID>`, `<ALB_DNS>`) before merge. A CI check (gitleaks plus a custom rule for 12-digit account IDs and `*.elb.amazonaws.com`) fails the PR otherwise.
 - The architecture, role names, and trust policies are public by design. No security control may depend on the design being secret.
 
@@ -589,13 +592,14 @@ Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui
 - Provider `default_tags`: `Project=shiptrack`, `Stack=platform`, `Environment=dev`, `Owner=<var>`, `CostCenter=<var>`, `ManagedBy=terraform`, `Repo=shiptrack-platform`. Legacy and modern use the same keys with their own `Stack` value.
 - **Early manual step (do this first):** activate `Project`, `Stack`, and `Environment` as **cost allocation tags** in the Billing console. Activation can take up to 24 h and is **not retroactive**. Without it, the before/after cost comparison has no data. Also enable **Split cost allocation data for Amazon EKS** in Cost Management preferences **[VERIFY location in console]**.
 - Name pattern: `shiptrack-<stack>-<component>`. Platform resources may omit `<stack>` (for example `shiptrack-alb`).
+- **IAM names:** every IAM role, instance profile, and customer managed policy is named `<PREFIX>-<stack>-<component>`, where `<PREFIX>` = `<owner>-<environment>-<project>` (for example `<owner>-dev-shiptrack`). It is the `role_prefix` Terraform variable and the `ROLE_PREFIX` repository variable and is never hardcoded. The seed role is `<SEED>` = `<owner>-bootstrap-<project>-seed`. Pipelines may create IAM only under their prefix: platform `<PREFIX>-*`, legacy `<PREFIX>-legacy-*`, modern `<PREFIX>-modern-*`. Non-IAM resources keep the `shiptrack-` pattern above.
 
 ---
 
 ## 9. Security requirements checklist
 
 - [ ] No IAM users or access keys; all CI via GitHub OIDC with `sub` pinned to repo + event/environment
-- [ ] Every app-created IAM role carries `shiptrack-workload-boundary`
+- [ ] Every app-created IAM role carries `<PREFIX>-workload-boundary`
 - [ ] All data at rest encrypted with CMKs except where AWS requires otherwise (ALB logs: SSE-S3)
 - [ ] All buckets: BPA, TLS-only policy, ownership enforced
 - [ ] RDS: private, TLS enforced, master used only for bootstrap/break-glass, app uses DML-only role
@@ -676,7 +680,7 @@ Phase numbers are otherwise unchanged, and each phase's "Done when" must pass be
 
 | Phase | Deliverables | Done when |
 |---|---|---|
-| **P0 Bootstrap** | `bootstrap/` (state bucket, state KMS key, boundary, 9 roles; OIDC provider read by data source), `bootstrap-apply.yml`, README with the manual seed steps (§6.1) and workflow procedure | `terraform validate` + `checkov` pass; `actionlint` passes; trust policies show exact `sub` strings in the README; after you run the workflow, the state is in S3 and a second run is a no-op |
+| **P0 Bootstrap** | `bootstrap/` (state bucket, state KMS key, boundary, 9 roles; OIDC provider read by data source), `bootstrap-apply.yml`, `scripts/ci.sh`, `scripts/github-setup.sh`, `tests/moto.sh`, README with the manual seed steps (§6.1) and workflow procedure | `terraform validate`, `tflint`, `trivy config`, and `checkov` pass; `actionlint` and `shellcheck` pass; `tests/moto.sh` passes; trust policies show exact `sub` strings in the README; after you run the workflow, the state is in S3 and a second run is a no-op |
 | **P1 Network + KMS** | `modules/network`, `modules/kms`, `envs/dev` wiring, backend config | Plan clean; subnet tags match §6.2 |
 | **P2 Database** | `modules/database`, secrets with write-only args, `db/bootstrap.sql`, `db/RUNBOOK-db-bootstrap.md` | SQL is idempotent (`psql` run twice against a local Postgres 17 container in a test script) |
 | **P3 Storage + Ingress** | `modules/storage`, `modules/ingress` (TGs, rules, `cutover` var with validation) | Plan shows 4 listener rules (P10, P20, P90, P100) + weighted default action; changing weights alters only rules/default action |
