@@ -198,3 +198,20 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** The dev environment uses `db.t3.medium`, which has the same 4 GiB of memory and is the next most widely offered burstable class. Storage stays gp3, as designed. The module default is still `db.t4g.medium`. If this fails the same way, the next change is the storage type, and after that a larger class. `scripts/terraform-ci.sh` masks `[id=...]` values and EC2 network resource IDs, along with the account ID, in the output it prints when a step fails.
 
 **Consequences:** `db.t3.medium` is x86 and has lower baseline performance per dollar than the Graviton class; the cost optimization pass (design §10) can revisit the class once capacity is known. The mask hides IDs that would help to debug a failure from the log; the Terraform state and the AWS console still show them.
+
+## ADR-0017: p3-storage-and-ingress
+
+**Status:** Accepted
+
+**Context:** P3 creates the three buckets and the ALB with its cutover rules. The design left two items to verify and did not say how an unset domain reaches Terraform.
+
+**Decision:**
+- The ALB access-log bucket grants `s3:PutObject` to the service principal `logdelivery.elasticloadbalancing.amazonaws.com`, limited by `aws:SourceArn` to load balancers in this account and region. AWS recommends it over the per-region ELB account IDs that regions opened before August 2022 needed, and it works in every region. This resolves the **[VERIFY]** in design §6.5.
+- The ALB is created only after the log bucket's policy exists: the bucket-name output depends on the policy, because the ALB checks write access when it is created.
+- The CloudTrail bucket's policy also lets AWS Config deliver to `AWSLogs/<account>/Config/`, as the logs key policy anticipates (§6.3). The trail itself is created in P4; its name is the `trail_name` variable.
+- The workflows pass `TF_VAR_domain_name` and `TF_VAR_hosted_zone_name` from the optional `DOMAIN_NAME` and `HOSTED_ZONE_NAME` repository variables. An unset variable arrives as an empty string, which the ingress module treats as no domain. With a domain the ALB gets an ACM certificate, an HTTPS listener with `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09`, an HTTP redirect, and an alias record. That policy name is taken from AWS's documentation and not exercised until a domain is set **[VERIFY at first use]**.
+- The certificate-validation records are keyed by the configured domain name, not by the certificate's apply-time options.
+- Checkov and Trivy findings that follow from the design are skipped inline with reasons: the public ALB, HTTP without a domain (risk R-01), HTTP between the ALB and its targets, the optional WAF, and SSE-S3 on the ALB log bucket.
+- Module tests cover the rule priorities, the header conditions, UI-only stickiness, and that moving `cutover.track` leaves the default action, the ALB, and the header rules unchanged.
+
+**Consequences:** The ALB is internet-facing over plain HTTP until a domain is set (R-01). Deletion protection is on, so removing the ALB takes two steps. The test-routing token is in state and in the listener rules (R-04).

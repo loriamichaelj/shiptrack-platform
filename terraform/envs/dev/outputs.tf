@@ -89,3 +89,48 @@ output "db_master_secret_arn" {
   description = "ARN of the RDS-managed master secret."
   value       = module.database.master_secret_arn
 }
+
+output "pod_bucket_name" {
+  description = "Name of the proof-of-delivery bucket."
+  value       = module.storage.pod_bucket_name
+}
+
+output "pod_bucket_arn" {
+  description = "ARN of the proof-of-delivery bucket."
+  value       = module.storage.pod_bucket_arn
+}
+
+output "alb_arn" {
+  description = "ARN of the ALB."
+  value       = module.ingress.alb_arn
+}
+
+output "alb_dns_name" {
+  description = "DNS name of the ALB."
+  value       = module.ingress.alb_dns_name
+}
+
+output "listener_arn" {
+  description = "ARN of the listener that serves traffic."
+  value       = module.ingress.listener_arn
+}
+
+output "tg_legacy_arn" {
+  description = "ARN of the legacy target group."
+  value       = module.ingress.tg_legacy_arn
+}
+
+output "tg_modern_arn" {
+  description = "ARN of the modern target group."
+  value       = module.ingress.tg_modern_arn
+}
+
+output "base_url" {
+  description = "Base URL of the ALB."
+  value       = module.ingress.base_url
+}
+
+output "test_token_secret_arn" {
+  description = "ARN of the secret that holds the test-routing token."
+  value       = module.ingress.test_token_secret_arn
+}

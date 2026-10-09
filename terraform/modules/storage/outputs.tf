@@ -1,0 +1,31 @@
+output "pod_bucket_name" {
+  description = "Name of the proof-of-delivery bucket."
+  value       = aws_s3_bucket.pod.id
+}
+
+output "pod_bucket_arn" {
+  description = "ARN of the proof-of-delivery bucket."
+  value       = aws_s3_bucket.pod.arn
+}
+
+# The ALB checks that it can write here when it is created, so the policy must exist first.
+output "alb_logs_bucket_name" {
+  description = "Name of the ALB access-log bucket."
+  value       = aws_s3_bucket.alb_logs.id
+  depends_on  = [aws_s3_bucket_policy.alb_logs]
+}
+
+output "alb_logs_bucket_arn" {
+  description = "ARN of the ALB access-log bucket."
+  value       = aws_s3_bucket.alb_logs.arn
+}
+
+output "cloudtrail_bucket_name" {
+  description = "Name of the CloudTrail bucket."
+  value       = aws_s3_bucket.cloudtrail.id
+}
+
+output "cloudtrail_bucket_arn" {
+  description = "ARN of the CloudTrail bucket."
+  value       = aws_s3_bucket.cloudtrail.arn
+}
