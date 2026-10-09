@@ -70,3 +70,9 @@ variable "inspector_timeout" {
   type        = string
   default     = "20m"
 }
+
+variable "security_hub_timeout" {
+  description = "How long to wait for a Security Hub standard to become ready, or to be removed."
+  type        = string
+  default     = "20m"
+}

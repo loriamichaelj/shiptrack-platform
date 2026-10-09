@@ -242,12 +242,23 @@ resource "aws_securityhub_account" "this" {
 resource "aws_securityhub_standards_subscription" "foundational" {
   standards_arn = "arn:${local.partition}:securityhub:${local.region}::standards/aws-foundational-security-best-practices/v/1.0.0"
 
+  # A standard can take longer than the provider's three-minute default to become ready.
+  timeouts {
+    create = var.security_hub_timeout
+    delete = var.security_hub_timeout
+  }
+
   depends_on = [aws_securityhub_account.this]
 }
 
 # The standard's ARN is region-specific and version-pinned.
 resource "aws_securityhub_standards_subscription" "cis" {
   standards_arn = "arn:${local.partition}:securityhub:${local.region}::standards/cis-aws-foundations-benchmark/v/3.0.0"
+
+  timeouts {
+    create = var.security_hub_timeout
+    delete = var.security_hub_timeout
+  }
 
   depends_on = [aws_securityhub_account.this]
 }
@@ -258,9 +269,10 @@ resource "aws_inspector2_enabler" "this" {
   account_ids    = [local.account]
   resource_types = ["EC2", "ECR"]
 
-  # Enabling EC2 scanning can take longer than the provider's five-minute default.
+  # Enabling or disabling EC2 scanning can take longer than the provider's five-minute default.
   timeouts {
     create = var.inspector_timeout
+    delete = var.inspector_timeout
   }
 }
 

@@ -275,7 +275,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:**
 - AWS Config: the existing recorder and delivery channel are adopted with `import` blocks in `terraform/envs/dev` and keep their names, which are now module variables. The module then reconfigures them: this role, all supported resource types recorded daily (IAM and security groups continuously), delivery to the CloudTrail bucket under `config/`, and recording started. The previous delivery bucket stops receiving anything. Security Hub follows because its controls need Config.
 - Access Analyzer: a second account analyzer is not created. The account's own satisfies design §6.7. `manage_access_analyzer` is off in `dev`; the module still creates one where the account has none.
-- Inspector: the enabler waits up to 20 minutes (`inspector_timeout`). A resource that timed out while waiting is tainted in state, so the next plan may replace it, which disables and enables scanning again.
+- Inspector and Security Hub: the Inspector enabler (create and delete) and each Security Hub standard (create and delete) wait up to 20 minutes (`inspector_timeout`, `security_hub_timeout`). The first adoption apply ran out of the provider's five-minute and three-minute defaults, while Config recording, the Security Hub account, and the CIS subscription had succeeded. A resource that timed out while waiting is tainted in state, so the next plan replaces it, which disables and enables scanning, or removes and re-adds the standard.
 - The `import` blocks are removed in a later change, once an apply has imported the two resources.
 - `.github/workflows/inspect-account.yml` stays as a read-only diagnostic that lists these services by name and status, without ARNs or account IDs.
 

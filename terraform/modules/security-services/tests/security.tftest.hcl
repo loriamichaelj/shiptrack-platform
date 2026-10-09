@@ -206,3 +206,12 @@ run "inspector_waits_longer_than_the_default" {
     error_message = "Enabling EC2 scanning can take longer than five minutes."
   }
 }
+
+run "slow_services_get_longer_timeouts" {
+  command = plan
+
+  assert {
+    condition     = var.inspector_timeout == "20m" && var.security_hub_timeout == "20m"
+    error_message = "Inspector and Security Hub can take longer than the provider's defaults to settle."
+  }
+}
