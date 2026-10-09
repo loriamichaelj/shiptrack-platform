@@ -157,3 +157,18 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** `terraform-pr.yml` has two jobs. `lint` (format, `validate` with `init -backend=false`, TFLint, Checkov, Trivy) needs no AWS access and runs for forks. `plan` runs only for same-repository pull requests, after `lint`, under the plan role. Both `plan` and `terraform-apply.yml` run `scripts/terraform-ci.sh`, which looks up the account, derives the bucket name `shiptrack-tfstate-<account>-<region>` as bootstrap does, and passes the backend settings to `init`, so `terraform/envs/dev/backend.tf` holds only an empty `backend "s3" {}` block. Trivy runs twice over the repository: once for the SARIF report sent to code scanning, once as the gate. Checkov is installed with `pipx` at a pinned version because it has no action to pin to a SHA.
 
 **Consequences:** Lint runs on every Terraform pull request without credentials. The apply workflow's path filter is `terraform/**` only, so edits to the workflow or the script are exercised by the plan job on the pull request rather than by an approval-gated apply. `terraform-apply.yml` fails if `terraform/envs/dev` does not exist when `terraform/**` changes, which P1 prevents by adding both together.
+
+## ADR-0014: p1-network-and-keys
+
+**Status:** Accepted
+
+**Context:** P1 creates the first resources the platform pipeline applies. Several values the design leaves open had to be chosen.
+
+**Decision:**
+- The `Owner` tag is the GitHub repository owner, passed by the workflows as `TF_VAR_owner`. `CostCenter` is `shiptrack-migration` in `terraform.tfvars`. Neither is an identifier that needs hiding.
+- The VPC flow-log role is `<PREFIX>-platform-flow-logs`, so the platform apply role's IAM scope (`<PREFIX>-*`) covers it. It does not carry the workload boundary, which applies to roles created by the legacy and modern pipelines.
+- The private-data subnets have their own route table with no default route: the database needs no internet path. They share the S3 gateway endpoint with the private-app tables.
+- The first three zones returned by `aws_availability_zones` are used, as the design says. The Checkov check that asks for pinned zone identity (CKV_AWS_394) is skipped inline for that reason.
+- Module tests use Terraform's mocked provider (`terraform test`), so the subnet CIDRs and tags, NAT modes, endpoints, and security-group rules are checked without any AWS access.
+
+**Consequences:** If AWS adds a zone that sorts before the current first three, a plan would move subnets; the plan summary shows it before an apply is approved. Tests assert the design's values but cannot show that AWS accepts the configuration; the first `plan` under the plan role does.

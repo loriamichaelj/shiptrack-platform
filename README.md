@@ -17,4 +17,7 @@ an OIDC role, with a reviewer approving each apply.
 | Phase | State |
 |---|---|
 | P0 Bootstrap | `bootstrap/` and `bootstrap-apply.yml` |
-| P1 onward | not started |
+| P6a Terraform workflows | `terraform-pr.yml`, `terraform-apply.yml` |
+| P6 scrub and local checks | `scrub.yml`, `.gitleaks.toml`, `.pre-commit-config.yaml` |
+| P1 Network and KMS | `terraform/modules/network`, `terraform/modules/kms`, `terraform/envs/dev` |
+| P2 to P5, P6b, P7, P8 | not started |

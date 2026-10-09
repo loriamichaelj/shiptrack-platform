@@ -135,7 +135,7 @@ jobs:
         if: steps.env.outputs.present == 'true'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
-          TF_VAR_github_org: ${{ github.repository_owner }}
+          TF_VAR_owner: ${{ github.repository_owner }}
           TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan
