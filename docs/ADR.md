@@ -188,3 +188,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - `db/tests/bootstrap.sh` runs the script three times against a pinned PostgreSQL 17 container and checks the roles, schema, default privileges, and password changes. It is run locally and is not yet part of CI.
 
 **Consequences:** The first real database bootstrap run is also the test of the master-user grant. Passwords never enter Terraform state, but they are visible in the Secrets Manager secrets to roles allowed to read them (the platform plan role can read `shiptrack/dev/db/*`, risk R-09).
+
+## ADR-0016: db-instance-class-and-failure-logs
+
+**Status:** Accepted
+
+**Context:** The first apply created 58 of 61 resources, then `CreateDBInstance` failed twice, minutes apart, with `InsufficientDBInstanceCapacity`: no Availability Zone had capacity for `db.t4g.medium` on gp3 in the VPC. The account has no CLI access from the workstation, so the orderable options could not be listed. The failure also printed Terraform's full output to the log of a public repository, including VPC, subnet, and security group IDs.
+
+**Decision:** The dev environment uses `db.t3.medium`, which has the same 4 GiB of memory and is the next most widely offered burstable class. Storage stays gp3, as designed. The module default is still `db.t4g.medium`. If this fails the same way, the next change is the storage type, and after that a larger class. `scripts/terraform-ci.sh` masks `[id=...]` values and EC2 network resource IDs, along with the account ID, in the output it prints when a step fails.
+
+**Consequences:** `db.t3.medium` is x86 and has lower baseline performance per dollar than the Graviton class; the cost optimization pass (design §10) can revisit the class once capacity is known. The mask hides IDs that would help to debug a failure from the log; the Terraform state and the AWS console still show them.

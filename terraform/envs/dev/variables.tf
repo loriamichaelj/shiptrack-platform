@@ -72,9 +72,9 @@ variable "db_engine_version" {
 }
 
 variable "db_instance_class" {
-  description = "RDS instance class."
+  description = "RDS instance class. db.t3.medium because AWS reported no db.t4g.medium capacity for gp3 in the account's AZs (ADR-0016)."
   type        = string
-  default     = "db.t4g.medium"
+  default     = "db.t3.medium"
 }
 
 variable "db_allocated_storage" {
