@@ -39,6 +39,9 @@ export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT_URL="http://localhost:$port"
 export AWS_S3_USE_PATH_STYLE=true
 export TF_VAR_github_org=$org
+# Numeric IDs differ from each other so a mix-up between repositories is caught.
+export TF_VAR_github_owner_id=1000
+export TF_VAR_repository_ids='{"platform":"11","legacy":"22","modern":"33"}'
 # A prefix unlike the real one: the roles must follow the variable, not a hardcoded name.
 rp=testowner-dev-shiptrack
 export TF_VAR_role_prefix=$rp
@@ -100,16 +103,16 @@ eq "the key alias exists" "$(aws kms list-aliases --query "Aliases[?AliasName=='
 
 section "trust policies (exact sub claims)"
 sub_of() { aws iam get-role --role-name "$1" --query 'Role.AssumeRolePolicyDocument' --output json | jq -r '.Statement[0].Condition.StringEquals."token.actions.githubusercontent.com:sub" | if type=="array" then join(" | ") else . end'; }
-r="repo:$org"
-eq "platform-plan"  "$(sub_of $rp-platform-plan)"  "$r/shiptrack-platform:pull_request | $r/shiptrack-platform:ref:refs/heads/dev"
-eq "platform-apply" "$(sub_of $rp-platform-apply)" "$r/shiptrack-platform:environment:dev"
-eq "legacy-plan"    "$(sub_of $rp-legacy-plan)"    "$r/shiptrack-legacy:pull_request | $r/shiptrack-legacy:ref:refs/heads/dev"
-eq "legacy-apply"   "$(sub_of $rp-legacy-apply)"   "$r/shiptrack-legacy:environment:dev"
-eq "legacy-deploy"  "$(sub_of $rp-legacy-deploy)"  "$r/shiptrack-legacy:environment:dev"
-eq "modern-plan"    "$(sub_of $rp-modern-plan)"    "$r/shiptrack-modern:pull_request | $r/shiptrack-modern:ref:refs/heads/dev"
-eq "modern-apply"   "$(sub_of $rp-modern-apply)"   "$r/shiptrack-modern:environment:dev"
-eq "modern-release" "$(sub_of $rp-modern-release)" "$r/shiptrack-modern:ref:refs/heads/dev"
-eq "modern-deploy"  "$(sub_of $rp-modern-deploy)"  "$r/shiptrack-modern:environment:dev"
+r="repo:$org@1000"
+eq "platform-plan"  "$(sub_of $rp-platform-plan)"  "$r/shiptrack-platform@11:pull_request | $r/shiptrack-platform@11:ref:refs/heads/dev"
+eq "platform-apply" "$(sub_of $rp-platform-apply)" "$r/shiptrack-platform@11:environment:dev"
+eq "legacy-plan"    "$(sub_of $rp-legacy-plan)"    "$r/shiptrack-legacy@22:pull_request | $r/shiptrack-legacy@22:ref:refs/heads/dev"
+eq "legacy-apply"   "$(sub_of $rp-legacy-apply)"   "$r/shiptrack-legacy@22:environment:dev"
+eq "legacy-deploy"  "$(sub_of $rp-legacy-deploy)"  "$r/shiptrack-legacy@22:environment:dev"
+eq "modern-plan"    "$(sub_of $rp-modern-plan)"    "$r/shiptrack-modern@33:pull_request | $r/shiptrack-modern@33:ref:refs/heads/dev"
+eq "modern-apply"   "$(sub_of $rp-modern-apply)"   "$r/shiptrack-modern@33:environment:dev"
+eq "modern-release" "$(sub_of $rp-modern-release)" "$r/shiptrack-modern@33:ref:refs/heads/dev"
+eq "modern-deploy"  "$(sub_of $rp-modern-deploy)"  "$r/shiptrack-modern@33:environment:dev"
 eq "audience is sts.amazonaws.com" "$(aws iam get-role --role-name $rp-legacy-deploy --query 'Role.AssumeRolePolicyDocument.Statement[0].Condition.StringEquals."token.actions.githubusercontent.com:aud"' --output text)" "sts.amazonaws.com"
 eq "exactly nine deploy roles" "$(aws iam list-roles --query "Roles[?starts_with(RoleName,'$rp-')].RoleName" --output json | jq length)" "9"
 

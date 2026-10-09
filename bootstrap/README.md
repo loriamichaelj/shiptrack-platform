@@ -11,6 +11,24 @@ by hand once. Nothing is applied from a workstation. See `docs/DESIGN.md` §6.1 
 Replace `<ORG>` with your GitHub user or organization. Account IDs stay out of this repository, so
 the examples read the account from your own AWS session.
 
+### OIDC subject claims
+
+These repositories issue OIDC tokens with an immutable subject: the owner and repository names are
+followed by their numeric IDs, as in `repo:<ORG>@<OWNER_ID>/shiptrack-platform@<PLATFORM_ID>:environment:bootstrap`.
+A trust policy written with names only (`repo:<ORG>/<repo>:...`) never matches. Look the IDs up with:
+
+```sh
+gh api users/<ORG> --jq .id                      # <OWNER_ID>
+gh api repos/<ORG>/shiptrack-platform --jq .id   # <PLATFORM_ID>; likewise legacy and modern
+gh api repos/<ORG>/shiptrack-platform/actions/oidc/customization/sub   # shows the claim prefix
+```
+
+The owner ID comes from the workflow context. The repository IDs are the `REPO_IDS` repository
+variable on `shiptrack-platform`, a JSON object (see step 3). Only the part before the suffix
+(`:environment:...`, `:pull_request`, `:ref:...`) is documented by GitHub for these subjects; the
+suffixes are unchanged from the default format, so a first-run `AssumeRoleWithWebIdentity` failure
+means checking the token's actual `sub` first.
+
 ### Naming
 
 Every IAM role, instance profile, and customer managed policy is named
@@ -48,7 +66,7 @@ cat >/tmp/seed-trust.json <<JSON
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:<ORG>/shiptrack-platform:environment:bootstrap"
+        "token.actions.githubusercontent.com:sub": "repo:<ORG>@<OWNER_ID>/shiptrack-platform@<PLATFORM_ID>:environment:bootstrap"
       }
     }
   }]
@@ -96,6 +114,8 @@ gh secret set AWS_BOOTSTRAP_ROLE_ARN -R <ORG>/shiptrack-platform \
 gh variable set AWS_REGION -R <ORG>/shiptrack-platform --body us-east-1
 gh variable set ROLE_PREFIX -R <ORG>/shiptrack-platform --body <PREFIX>
 gh variable set SEED_ROLE_NAME -R <ORG>/shiptrack-platform --body <SEED>
+gh variable set REPO_IDS -R <ORG>/shiptrack-platform \
+  --body '{"platform":"<PLATFORM_ID>","legacy":"<LEGACY_ID>","modern":"<MODERN_ID>"}'
 ```
 
 ### 4. Merge this to `dev`
@@ -145,15 +165,15 @@ this table. `bootstrap/tests/moto.sh` checks these exact strings.
 
 | Role | `sub` claims |
 |---|---|
-| `<PREFIX>-platform-plan` | `repo:<ORG>/shiptrack-platform:pull_request`, `repo:<ORG>/shiptrack-platform:ref:refs/heads/dev` |
-| `<PREFIX>-platform-apply` | `repo:<ORG>/shiptrack-platform:environment:dev` |
-| `<PREFIX>-legacy-plan` | `repo:<ORG>/shiptrack-legacy:pull_request`, `repo:<ORG>/shiptrack-legacy:ref:refs/heads/dev` |
-| `<PREFIX>-legacy-apply` | `repo:<ORG>/shiptrack-legacy:environment:dev` |
-| `<PREFIX>-legacy-deploy` | `repo:<ORG>/shiptrack-legacy:environment:dev` |
-| `<PREFIX>-modern-plan` | `repo:<ORG>/shiptrack-modern:pull_request`, `repo:<ORG>/shiptrack-modern:ref:refs/heads/dev` |
-| `<PREFIX>-modern-apply` | `repo:<ORG>/shiptrack-modern:environment:dev` |
-| `<PREFIX>-modern-release` | `repo:<ORG>/shiptrack-modern:ref:refs/heads/dev` |
-| `<PREFIX>-modern-deploy` | `repo:<ORG>/shiptrack-modern:environment:dev` |
+| `<PREFIX>-platform-plan` | `repo:<ORG>@<OWNER_ID>/shiptrack-platform@<PLATFORM_ID>:pull_request`, `repo:<ORG>@<OWNER_ID>/shiptrack-platform@<PLATFORM_ID>:ref:refs/heads/dev` |
+| `<PREFIX>-platform-apply` | `repo:<ORG>@<OWNER_ID>/shiptrack-platform@<PLATFORM_ID>:environment:dev` |
+| `<PREFIX>-legacy-plan` | `repo:<ORG>@<OWNER_ID>/shiptrack-legacy@<LEGACY_ID>:pull_request`, `repo:<ORG>@<OWNER_ID>/shiptrack-legacy@<LEGACY_ID>:ref:refs/heads/dev` |
+| `<PREFIX>-legacy-apply` | `repo:<ORG>@<OWNER_ID>/shiptrack-legacy@<LEGACY_ID>:environment:dev` |
+| `<PREFIX>-legacy-deploy` | `repo:<ORG>@<OWNER_ID>/shiptrack-legacy@<LEGACY_ID>:environment:dev` |
+| `<PREFIX>-modern-plan` | `repo:<ORG>@<OWNER_ID>/shiptrack-modern@<MODERN_ID>:pull_request`, `repo:<ORG>@<OWNER_ID>/shiptrack-modern@<MODERN_ID>:ref:refs/heads/dev` |
+| `<PREFIX>-modern-apply` | `repo:<ORG>@<OWNER_ID>/shiptrack-modern@<MODERN_ID>:environment:dev` |
+| `<PREFIX>-modern-release` | `repo:<ORG>@<OWNER_ID>/shiptrack-modern@<MODERN_ID>:ref:refs/heads/dev` |
+| `<PREFIX>-modern-deploy` | `repo:<ORG>@<OWNER_ID>/shiptrack-modern@<MODERN_ID>:environment:dev` |
 
 ## State layout
 

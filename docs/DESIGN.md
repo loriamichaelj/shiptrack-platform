@@ -174,7 +174,7 @@ Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a sta
 
 **Manual prerequisites (a human, once; documented in `bootstrap/README.md`):**
 1. In the AWS account, create the GitHub OIDC provider (values below).
-2. Create IAM role `<SEED>` (§8) with trust `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and `:sub = repo:<org>/shiptrack-platform:environment:bootstrap`. Attach `AdministratorAccess` initially, because bootstrap creates IAM roles, the permission boundary, and KMS keys. Narrowing or retiring it is tracked as risk R-10.
+2. Create IAM role `<SEED>` (§8) with trust `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and `:sub = repo:<org>@<owner-id>/shiptrack-platform@<repo-id>:environment:bootstrap`. Attach `AdministratorAccess` initially, because bootstrap creates IAM roles, the permission boundary, and KMS keys. Narrowing or retiring it is tracked as risk R-10.
 3. In GitHub, on **each of the three repos**: create environment `dev` (and `bootstrap` on `shiptrack-platform`) with required reviewers and deployment branches limited to `dev`; protect `dev` so changes arrive by pull request; enable "Require approval for all outside collaborators" (§6.12).
 4. On `shiptrack-platform`, set the seed role ARN as a secret, and the region, `ROLE_PREFIX`, and `SEED_ROLE_NAME` as variables. After the first bootstrap run, set each repo's role ARNs as **secrets** (GitHub masks them in logs; variables are not masked). `bootstrap/README.md` lists the `gh` commands.
 
@@ -216,10 +216,10 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
   - `kms:ScheduleKeyDeletion` on platform keys
   - Organizations actions
 
-**Deploy roles** (9 total). Trust uses `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and on `:sub` (a list where two values are shown). The `sub` value depends on how the job runs:
-- `pull_request` event → `repo:<org>/<repo>:pull_request`
-- job with `environment:` → `repo:<org>/<repo>:environment:<name>`
-- push, schedule, or dispatch on `dev` without an environment → `repo:<org>/<repo>:ref:refs/heads/dev`
+**Deploy roles** (9 total). Trust uses `StringEquals` on `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and on `:sub` (a list where two values are shown). The repositories use immutable subjects, so the owner and repository names carry their numeric IDs (ADR-0012). The `sub` value depends on how the job runs:
+- `pull_request` event → `repo:<org>@<owner-id>/<repo>@<repo-id>:pull_request`
+- job with `environment:` → `repo:<org>@<owner-id>/<repo>@<repo-id>:environment:<name>`
+- push, schedule, or dispatch on `dev` without an environment → `repo:<org>@<owner-id>/<repo>@<repo-id>:ref:refs/heads/dev`
 
 | Role | `sub` condition | Permissions summary |
 |---|---|---|

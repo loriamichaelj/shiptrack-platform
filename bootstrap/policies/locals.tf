@@ -9,13 +9,14 @@ locals {
   seed_role_arn = "arn:${local.p}:iam::${local.a}:role/${var.seed_role_name}"
 
   stacks = ["platform", "legacy", "modern"]
-  repos  = { for stack in local.stacks : stack => "${var.github_org}/${var.repositories[stack]}" }
+  # Repositories issue tokens with an immutable subject: names are followed by their numeric IDs.
+  repos = { for stack in local.stacks : stack => "${var.github_org}@${var.github_owner_id}/${var.repositories[stack]}@${var.repository_ids[stack]}" }
 
   # The `sub` claim depends on how the job runs:
-  #   pull_request event          -> repo:<org>/<repo>:pull_request
-  #   job with `environment:`     -> repo:<org>/<repo>:environment:<name>
+  #   pull_request event          -> repo:<org>@<id>/<repo>@<id>:pull_request
+  #   job with `environment:`     -> repo:<org>@<id>/<repo>@<id>:environment:<name>
   #   push/schedule/dispatch with
-  #   no environment              -> repo:<org>/<repo>:ref:refs/heads/<branch>
+  #   no environment              -> repo:<org>@<id>/<repo>@<id>:ref:refs/heads/<branch>
   sub_pull_request = { for stack, repo in local.repos : stack => "repo:${repo}:pull_request" }
   sub_environment  = { for stack, repo in local.repos : stack => "repo:${repo}:environment:${local.env}" }
   sub_branch       = { for stack, repo in local.repos : stack => "repo:${repo}:ref:refs/heads/${var.branch}" }

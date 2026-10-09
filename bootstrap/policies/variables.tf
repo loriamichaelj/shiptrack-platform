@@ -18,6 +18,20 @@ variable "github_org" {
   type        = string
 }
 
+variable "github_owner_id" {
+  description = "Numeric ID of the GitHub owner."
+  type        = string
+}
+
+variable "repository_ids" {
+  description = "Numeric GitHub repository IDs, by stack."
+  type = object({
+    platform = string
+    legacy   = string
+    modern   = string
+  })
+}
+
 variable "repositories" {
   description = "Repository names without the organization."
   type = object({

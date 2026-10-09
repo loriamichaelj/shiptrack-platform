@@ -44,6 +44,8 @@ module "policies" {
   partition         = local.partition
   region            = var.aws_region
   github_org        = var.github_org
+  github_owner_id   = var.github_owner_id
+  repository_ids    = var.repository_ids
   repositories      = var.repositories
   environment       = var.environment
   role_prefix       = var.role_prefix
