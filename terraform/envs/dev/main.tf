@@ -128,3 +128,15 @@ module "contract" {
     state_bucket_name       = data.aws_s3_bucket.state.id
   }
 }
+
+module "security_services" {
+  source = "../../modules/security-services"
+
+  role_prefix              = var.role_prefix
+  cloudtrail_bucket_name   = module.storage.cloudtrail_bucket_name
+  pod_bucket_arn           = module.storage.pod_bucket_arn
+  logs_key_arn             = module.kms.logs_key_arn
+  sns_sev2_arn             = module.observability.sns_sev2_arn
+  enable_pod_data_events   = var.enable_pod_data_events
+  enable_guardduty_runtime = var.enable_guardduty_runtime
+}

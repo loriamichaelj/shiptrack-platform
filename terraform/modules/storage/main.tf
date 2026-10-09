@@ -383,9 +383,13 @@ data "aws_iam_policy_document" "cloudtrail" {
   }
 
   statement {
-    sid       = "ConfigWrite"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.cloudtrail.arn}/AWSLogs/${local.account}/Config/*"]
+    sid     = "ConfigWrite"
+    actions = ["s3:PutObject"]
+    # AWS Config delivers under the config/ prefix that modules/security-services sets.
+    resources = [
+      "${aws_s3_bucket.cloudtrail.arn}/AWSLogs/${local.account}/Config/*",
+      "${aws_s3_bucket.cloudtrail.arn}/config/AWSLogs/${local.account}/Config/*",
+    ]
 
     principals {
       type        = "Service"

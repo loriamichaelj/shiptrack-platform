@@ -154,3 +154,8 @@ output "contract_parameters" {
   description = "Names of the SSM parameters in the contract."
   value       = module.contract.parameter_names
 }
+
+output "trail_arn" {
+  description = "ARN of the CloudTrail trail."
+  value       = module.security_services.trail_arn
+}

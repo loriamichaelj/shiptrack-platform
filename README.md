@@ -23,4 +23,5 @@ an OIDC role, with a reviewer approving each apply.
 | P2 Database | `terraform/modules/database`, `db/bootstrap.sql`, `db/RUNBOOK-db-bootstrap.md` |
 | P3 Storage and ingress | `terraform/modules/storage`, `terraform/modules/ingress` |
 | P5 Observability and contract | `terraform/modules/observability`, `terraform/modules/contract` |
-| P4, P6b, P7, P8 | not started |
+| P4 Security services | `terraform/modules/security-services`, `docs/security/findings-register.md` |
+| P6b, P7, P8 | not started |

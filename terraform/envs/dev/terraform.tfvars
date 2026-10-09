@@ -29,3 +29,6 @@ cutover = {
   track   = { legacy = 100, modern = 0 }
   default = { legacy = 100, modern = 0 }
 }
+
+enable_pod_data_events   = false
+enable_guardduty_runtime = true
