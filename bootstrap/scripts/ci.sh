@@ -17,6 +17,8 @@
 # Environment:
 #   AWS_REGION             region of the state bucket (required)
 #   TF_VAR_github_org      GitHub organization or user (required)
+#   TF_VAR_github_owner_id numeric ID of that owner (required)
+#   TF_VAR_repository_ids  JSON object of numeric repository IDs: platform, legacy, modern (required)
 #   TF_VAR_role_prefix     prefix of every role and policy name (required)
 #   TF_VAR_seed_role_name  name of the manually created seed role (required)
 #   TF_BACKEND_EXTRA       extra lines for the backend block; used only by tests against moto
@@ -26,6 +28,8 @@ mode=${1:?usage: ci.sh plan|apply}
 [[ "$mode" == plan || "$mode" == apply ]] || { echo "unknown mode: $mode" >&2; exit 2; }
 : "${AWS_REGION:?AWS_REGION is required}"
 : "${TF_VAR_github_org:?TF_VAR_github_org is required}"
+: "${TF_VAR_github_owner_id:?TF_VAR_github_owner_id is required}"
+: "${TF_VAR_repository_ids:?TF_VAR_repository_ids is required}"
 : "${TF_VAR_role_prefix:?TF_VAR_role_prefix is required}"
 : "${TF_VAR_seed_role_name:?TF_VAR_seed_role_name is required}"
 export TF_IN_AUTOMATION=1 TF_INPUT=0

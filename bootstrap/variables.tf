@@ -14,6 +14,30 @@ variable "github_org" {
   }
 }
 
+variable "github_owner_id" {
+  description = "Numeric ID of the GitHub owner. The repositories issue OIDC tokens whose sub claim carries the owner and repository IDs."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_owner_id))
+    error_message = "github_owner_id must be a number."
+  }
+}
+
+variable "repository_ids" {
+  description = "Numeric GitHub repository IDs, by stack."
+  type = object({
+    platform = string
+    legacy   = string
+    modern   = string
+  })
+
+  validation {
+    condition     = alltrue([for id in values(var.repository_ids) : can(regex("^[0-9]+$", id))])
+    error_message = "Every repository ID must be a number."
+  }
+}
+
 variable "repositories" {
   description = "Repository names, without the organization."
   type = object({
