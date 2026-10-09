@@ -203,6 +203,11 @@ resource "aws_lb_listener" "http" {
           arn    = aws_lb_target_group.modern.arn
           weight = var.cutover.default.modern
         }
+
+        stickiness {
+          enabled  = true
+          duration = var.api_stickiness_seconds
+        }
       }
     }
   }
@@ -228,6 +233,11 @@ resource "aws_lb_listener" "https" {
       target_group {
         arn    = aws_lb_target_group.modern.arn
         weight = var.cutover.default.modern
+      }
+
+      stickiness {
+        enabled  = true
+        duration = var.api_stickiness_seconds
       }
     }
   }
@@ -323,8 +333,9 @@ resource "aws_lb_listener_rule" "ui" {
   }
 }
 
-# The API is stateless on the modern side, so there is no stickiness here: it would skew the
-# canary statistics.
+# The API is stateless on the modern side, so stickiness would skew the canary statistics. AWS
+# still requires group stickiness here because the legacy target group has target stickiness, so
+# it is set to the shortest duration (ADR-0018).
 resource "aws_lb_listener_rule" "track" {
   listener_arn = local.serving_listener_arn
   priority     = 100
@@ -340,6 +351,11 @@ resource "aws_lb_listener_rule" "track" {
       target_group {
         arn    = aws_lb_target_group.modern.arn
         weight = var.cutover.track.modern
+      }
+
+      stickiness {
+        enabled  = true
+        duration = var.api_stickiness_seconds
       }
     }
   }

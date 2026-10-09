@@ -105,3 +105,14 @@ variable "waf_rate_limit" {
   type        = number
   default     = 2000
 }
+
+variable "api_stickiness_seconds" {
+  description = "Group-level stickiness on the weighted API and default actions. AWS requires it while a target group in the forward has target stickiness (the legacy group does, AP-05); one second keeps clients re-rolling between stacks almost every request, so canary statistics stay per-request (ADR-0018)."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.api_stickiness_seconds >= 1 && var.api_stickiness_seconds <= 604800
+    error_message = "api_stickiness_seconds must be between 1 second and 7 days."
+  }
+}
