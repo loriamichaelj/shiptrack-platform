@@ -1,0 +1,155 @@
+name: terraform-pr
+
+# Checks every pull request that touches Terraform. `lint` needs no AWS access, so it also runs for
+# pull requests from forks. `plan` assumes the plan role, which a fork cannot reach, and posts only
+# resource addresses and actions as a comment (never attribute values). Plan files are never
+# uploaded. bootstrap/ is linted and scanned here but only ever planned and applied by
+# bootstrap-apply.yml.
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - "bootstrap/**"
+      - "scripts/terraform-ci.sh"
+      - ".tflint.hcl"
+      - ".checkov.yaml"
+      - ".github/workflows/terraform-pr.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.16.4"
+  TFLINT_VERSION: "v0.64.0"
+  TRIVY_VERSION: "v0.74.0"
+  CHECKOV_VERSION: "3.3.21"
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Find the Terraform roots
+        id: roots
+        run: |
+          dirs=(bootstrap)
+          if [[ -d terraform ]]; then dirs+=(terraform); fi
+          roots=(bootstrap)
+          if [[ -d terraform/envs/dev ]]; then roots+=(terraform/envs/dev); fi
+          echo "scan=${dirs[*]}" >>"$GITHUB_OUTPUT"
+          echo "validate=${roots[*]}" >>"$GITHUB_OUTPUT"
+      - name: Format
+        run: terraform fmt -check -recursive -diff
+      - name: Validate
+        env:
+          ROOTS: ${{ steps.roots.outputs.validate }}
+        run: |
+          for root in $ROOTS; do
+            echo "::group::$root"
+            terraform -chdir="$root" init -backend=false -input=false
+            terraform -chdir="$root" validate
+            echo "::endgroup::"
+          done
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: TFLint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          tflint --recursive --format compact
+      # Skips live inline, next to the resource: #checkov:skip=CKV_...: <reason>
+      - name: Checkov
+        env:
+          SCAN_DIRS: ${{ steps.roots.outputs.scan }}
+        run: |
+          args=()
+          for d in $SCAN_DIRS; do args+=(-d "$d"); done
+          pipx run --spec "checkov==${CHECKOV_VERSION}" checkov --config-file .checkov.yaml "${args[@]}"
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+      # One report for code scanning, then the gate that fails the job. Run once over the repository
+      # so the SARIF has a single run.
+      - name: Trivy (SARIF for code scanning)
+        run: trivy config --quiet --severity HIGH,CRITICAL --skip-dirs "**/.terraform" --format sarif --output trivy.sarif .
+      - name: Upload SARIF
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-terraform
+      - name: Trivy (gate)
+        run: trivy config --severity HIGH,CRITICAL --skip-dirs "**/.terraform" --exit-code 1 .
+
+  plan:
+    needs: lint
+    # Forks receive no OIDC token, so the plan role is unreachable from them.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Look for the environment
+        id: env
+        run: |
+          if [[ -f terraform/envs/dev/main.tf ]]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+            echo "terraform/envs/dev does not exist yet; nothing to plan."
+          fi
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: steps.env.outputs.present == 'true'
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: steps.env.outputs.present == 'true'
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Plan
+        if: steps.env.outputs.present == 'true'
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          TF_VAR_github_org: ${{ github.repository_owner }}
+          TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
+          SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
+        run: scripts/terraform-ci.sh plan
+      - name: Comment the plan summary
+        if: steps.env.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
+        run: |
+          {
+            echo "### Terraform plan: platform/dev"
+            echo
+            echo "Addresses and actions only; no values."
+            echo
+            cat "$SUMMARY_FILE"
+          } >"$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file "$RUNNER_TEMP/comment.md"

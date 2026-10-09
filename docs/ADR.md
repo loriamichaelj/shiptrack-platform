@@ -147,3 +147,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** The deploy roles and the seed role trust the immutable subject. Bootstrap takes the owner ID from the workflow context (`github.repository_owner_id`) and the repository IDs from the `REPO_IDS` repository variable on the platform repository. The IDs are public and carry no account information.
 
 **Consequences:** A renamed or transferred repository keeps its trust only if its IDs are unchanged, and a deleted and recreated repository does not inherit it. The documented subject forms cover branch refs; the `environment` and `pull_request` suffixes follow the same pattern but are not shown in GitHub's documentation, so the first real run confirms them **[VERIFY]**.
+
+## ADR-0013: terraform-workflow-structure
+
+**Status:** Accepted
+
+**Context:** §6.11 lists the pull-request checks in one sequence that starts with `init` under the plan role. The state bucket name contains the account ID, so the backend cannot be committed, and fork pull requests receive no OIDC token.
+
+**Decision:** `terraform-pr.yml` has two jobs. `lint` (format, `validate` with `init -backend=false`, TFLint, Checkov, Trivy) needs no AWS access and runs for forks. `plan` runs only for same-repository pull requests, after `lint`, under the plan role. Both `plan` and `terraform-apply.yml` run `scripts/terraform-ci.sh`, which looks up the account, derives the bucket name `shiptrack-tfstate-<account>-<region>` as bootstrap does, and passes the backend settings to `init`, so `terraform/envs/dev/backend.tf` holds only an empty `backend "s3" {}` block. Trivy runs twice over the repository: once for the SARIF report sent to code scanning, once as the gate. Checkov is installed with `pipx` at a pinned version because it has no action to pin to a SHA.
+
+**Consequences:** Lint runs on every Terraform pull request without credentials. The apply workflow's path filter is `terraform/**` only, so edits to the workflow or the script are exercised by the plan job on the pull request rather than by an approval-gated apply. `terraform-apply.yml` fails if `terraform/envs/dev` does not exist when `terraform/**` changes, which P1 prevents by adding both together.
