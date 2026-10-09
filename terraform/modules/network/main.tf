@@ -6,15 +6,13 @@ data "aws_availability_zones" "available" {
 }
 
 data "aws_region" "current" {}
-data "aws_partition" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
-  azs       = slice(data.aws_availability_zones.available.names, 0, 3)
-  az_index  = { for i, az in local.azs : az => i }
-  region    = data.aws_region.current.region
-  partition = data.aws_partition.current.partition
-  account   = data.aws_caller_identity.current.account_id
+  azs      = slice(data.aws_availability_zones.available.names, 0, 3)
+  az_index = { for i, az in local.azs : az => i }
+  region   = data.aws_region.current.region
+  account  = data.aws_caller_identity.current.account_id
 
   # public /24 at 0-2, private-app /20 at 16, 32, 48, private-data /24 at 64-66 (for the default /16).
   public_cidrs       = [for i in range(3) : cidrsubnet(var.vpc_cidr, 8, i)]
