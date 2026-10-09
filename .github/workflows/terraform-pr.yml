@@ -78,9 +78,10 @@ jobs:
         env:
           SCAN_DIRS: ${{ steps.roots.outputs.scan }}
         run: |
-          args=()
-          for d in $SCAN_DIRS; do args+=(-d "$d"); done
-          pipx run --spec "checkov==${CHECKOV_VERSION}" checkov --config-file .checkov.yaml "${args[@]}"
+          # One run per directory: with repeated -d flags, Checkov scans only the first.
+          for d in $SCAN_DIRS; do
+            pipx run --spec "checkov==${CHECKOV_VERSION}" checkov --config-file .checkov.yaml -d "$d"
+          done
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: ${{ env.TRIVY_VERSION }}
@@ -134,7 +135,7 @@ jobs:
         if: steps.env.outputs.present == 'true'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
-          TF_VAR_github_org: ${{ github.repository_owner }}
+          TF_VAR_owner: ${{ github.repository_owner }}
           TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan
