@@ -64,3 +64,57 @@ variable "enable_tls" {
   type        = bool
   default     = false
 }
+
+variable "db_engine_version" {
+  description = "PostgreSQL 17 minor version. [VERIFY against the engine versions RDS offers.]"
+  type        = string
+  default     = "17.10"
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class."
+  type        = string
+  default     = "db.t4g.medium"
+}
+
+variable "db_allocated_storage" {
+  description = "Initial database storage in GiB."
+  type        = number
+  default     = 50
+}
+
+variable "db_max_allocated_storage" {
+  description = "Database storage autoscaling ceiling in GiB."
+  type        = number
+  default     = 200
+}
+
+variable "db_multi_az" {
+  description = "Run a standby in a second AZ (cost; risk R-05)."
+  type        = bool
+  default     = false
+}
+
+variable "db_backup_window" {
+  description = "Daily backup window (UTC)."
+  type        = string
+  default     = "05:00-06:00"
+}
+
+variable "db_maintenance_window" {
+  description = "Weekly maintenance window (UTC)."
+  type        = string
+  default     = "sun:07:00-sun:08:00"
+}
+
+variable "db_secret_version" {
+  description = "Bump to rotate the application and migrator passwords."
+  type        = number
+  default     = 1
+}
+
+variable "db_max_connections" {
+  description = "Expected max_connections, published for consumers' pool budgets. [VERIFY with SHOW max_connections.]"
+  type        = number
+  default     = 400
+}

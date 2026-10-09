@@ -54,3 +54,38 @@ output "kms_logs_key_arn" {
   description = "ARN of the logs key."
   value       = module.kms.logs_key_arn
 }
+
+output "rds_endpoint" {
+  description = "Address of the RDS instance."
+  value       = module.database.endpoint
+}
+
+output "rds_port" {
+  description = "Port of the RDS instance."
+  value       = module.database.port
+}
+
+output "db_name" {
+  description = "Name of the application database."
+  value       = module.database.db_name
+}
+
+output "db_max_connections" {
+  description = "Expected max_connections."
+  value       = module.database.max_connections
+}
+
+output "db_app_secret_arn" {
+  description = "ARN of the application credentials secret."
+  value       = module.database.app_secret_arn
+}
+
+output "db_migrator_secret_arn" {
+  description = "ARN of the migrator credentials secret."
+  value       = module.database.migrator_secret_arn
+}
+
+output "db_master_secret_arn" {
+  description = "ARN of the RDS-managed master secret."
+  value       = module.database.master_secret_arn
+}

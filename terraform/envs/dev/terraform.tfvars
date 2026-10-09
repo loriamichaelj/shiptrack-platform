@@ -9,3 +9,13 @@ nat_gateway_mode           = "single"
 enable_interface_endpoints = false
 allowed_ingress_cidrs      = ["0.0.0.0/0"]
 enable_tls                 = false
+
+db_engine_version        = "17.10"
+db_instance_class        = "db.t4g.medium"
+db_allocated_storage     = 50
+db_max_allocated_storage = 200
+db_multi_az              = false
+db_backup_window         = "05:00-06:00"
+db_maintenance_window    = "sun:07:00-sun:08:00"
+db_secret_version        = 1
+db_max_connections       = 400

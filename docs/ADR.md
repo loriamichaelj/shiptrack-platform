@@ -146,7 +146,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Decision:** The deploy roles and the seed role trust the immutable subject. Bootstrap takes the owner ID from the workflow context (`github.repository_owner_id`) and the repository IDs from the `REPO_IDS` repository variable on the platform repository. The IDs are public and carry no account information.
 
-**Consequences:** A renamed or transferred repository keeps its trust only if its IDs are unchanged, and a deleted and recreated repository does not inherit it. The documented subject forms cover branch refs; the `environment` and `pull_request` suffixes follow the same pattern but are not shown in GitHub's documentation, so the first real run confirms them **[VERIFY]**.
+**Consequences:** A renamed or transferred repository keeps its trust only if its IDs are unchanged, and a deleted and recreated repository does not inherit it. The documented subject forms cover branch refs; the `environment` and `pull_request` suffixes follow the same pattern but are not shown in GitHub's documentation. The `:environment:bootstrap` suffix is confirmed: the seed role was assumed by the first `bootstrap-apply` run. The `pull_request` and `ref:refs/heads/dev` suffixes are confirmed by the first plan-role run **[VERIFY]**.
 
 ## ADR-0013: terraform-workflow-structure
 
@@ -172,3 +172,19 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - Module tests use Terraform's mocked provider (`terraform test`), so the subnet CIDRs and tags, NAT modes, endpoints, and security-group rules are checked without any AWS access.
 
 **Consequences:** If AWS adds a zone that sorts before the current first three, a plan would move subnets; the plan summary shows it before an apply is approved. Tests assert the design's values but cannot show that AWS accepts the configuration; the first `plan` under the plan role does.
+
+## ADR-0015: p2-database
+
+**Status:** Accepted
+
+**Context:** P2 creates the RDS instance and the application credentials. The design leaves the engine minor version to be checked and does not say how the bootstrap script receives passwords or how the database is created.
+
+**Decision:**
+- The engine defaults to PostgreSQL 17.10, the newest 17.x minor confirmed in AWS's own announcements **[VERIFY with `aws rds describe-db-engine-versions`]**; the version is a variable.
+- The RDS instance creates no database. `db/bootstrap.sql` creates `shiptrack` (through `\gexec`, because `CREATE DATABASE` cannot run in a DO block), the roles, and the schema.
+- Passwords reach the script as psql variables and are passed to the server session with `set_config`, because a psql variable is not expanded inside a dollar-quoted DO body. The script resets both role passwords on every run, so a rotated secret reaches the database by running the script again.
+- The master user gets the migrator role for the length of the script (`GRANT` at the start, `REVOKE` at the end) so it can create the schema for it. Whether RDS's `rds_superuser` needs this is **[VERIFY]** on the first real run; on a plain superuser it is harmless.
+- The module tests keep the AWS provider mocked but use the real random provider, because Terraform's provider mocking does not support ephemeral resources. The random provider makes no network calls.
+- `db/tests/bootstrap.sh` runs the script three times against a pinned PostgreSQL 17 container and checks the roles, schema, default privileges, and password changes. It is run locally and is not yet part of CI.
+
+**Consequences:** The first real database bootstrap run is also the test of the master-user grant. Passwords never enter Terraform state, but they are visible in the Secrets Manager secrets to roles allowed to read them (the platform plan role can read `shiptrack/dev/db/*`, risk R-09).
