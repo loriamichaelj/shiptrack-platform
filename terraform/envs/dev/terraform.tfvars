@@ -19,3 +19,13 @@ db_backup_window         = "05:00-06:00"
 db_maintenance_window    = "sun:07:00-sun:08:00"
 db_secret_version        = 1
 db_max_connections       = 400
+
+pod_retention_days    = 2555
+ui_stickiness_seconds = 3600
+enable_waf            = false
+
+# Changing these weights IS the cutover; each change is a pull request.
+cutover = {
+  track   = { legacy = 100, modern = 0 }
+  default = { legacy = 100, modern = 0 }
+}

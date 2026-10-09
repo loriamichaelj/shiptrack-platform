@@ -137,6 +137,8 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION }}
           TF_VAR_owner: ${{ github.repository_owner }}
           TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
+          TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan
       - name: Comment the plan summary

@@ -118,3 +118,45 @@ variable "db_max_connections" {
   type        = number
   default     = 400
 }
+
+variable "pod_retention_days" {
+  description = "Days a proof-of-delivery document is kept (2555 is about seven years)."
+  type        = number
+  default     = 2555
+}
+
+variable "cutover" {
+  description = "ALB traffic weights. Changing this IS the cutover. Each change requires a PR."
+  type = object({
+    track   = object({ legacy = number, modern = number })
+    default = object({ legacy = number, modern = number })
+  })
+  default = {
+    track   = { legacy = 100, modern = 0 }
+    default = { legacy = 100, modern = 0 }
+  }
+}
+
+variable "ui_stickiness_seconds" {
+  description = "How long a browser stays with one stack for the UI rule."
+  type        = number
+  default     = 3600
+}
+
+variable "domain_name" {
+  description = "Custom domain for the ALB. Without one the ALB serves plain HTTP (risk R-01). Supplied by the workflows from the DOMAIN_NAME repository variable when it is set."
+  type        = string
+  default     = null
+}
+
+variable "hosted_zone_name" {
+  description = "Existing Route 53 hosted zone that holds domain_name; defaults to domain_name."
+  type        = string
+  default     = null
+}
+
+variable "enable_waf" {
+  description = "Attach the AWS WAF web ACL to the ALB."
+  type        = bool
+  default     = false
+}

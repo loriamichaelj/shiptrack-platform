@@ -21,4 +21,5 @@ an OIDC role, with a reviewer approving each apply.
 | P6 scrub and local checks | `scrub.yml`, `.gitleaks.toml`, `.pre-commit-config.yaml` |
 | P1 Network and KMS | `terraform/modules/network`, `terraform/modules/kms`, `terraform/envs/dev` |
 | P2 Database | `terraform/modules/database`, `db/bootstrap.sql`, `db/RUNBOOK-db-bootstrap.md` |
-| P3 to P5, P6b, P7, P8 | not started |
+| P3 Storage and ingress | `terraform/modules/storage`, `terraform/modules/ingress` |
+| P4, P5, P6b, P7, P8 | not started |
