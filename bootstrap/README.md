@@ -155,6 +155,7 @@ set_role shiptrack-modern   AWS_RELEASE_ROLE_ARN "$ROLE_PREFIX"-modern-release
 set_role shiptrack-modern   AWS_DEPLOY_ROLE_ARN  "$ROLE_PREFIX"-modern-deploy
 for repo in shiptrack-platform shiptrack-legacy shiptrack-modern; do
   gh variable set AWS_REGION -R "<ORG>/$repo" --body us-east-1
+  gh variable set ROLE_PREFIX -R "<ORG>/$repo" --body "$ROLE_PREFIX"
 done
 ```
 
