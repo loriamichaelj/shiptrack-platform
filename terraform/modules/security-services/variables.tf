@@ -46,3 +46,27 @@ variable "enable_guardduty_runtime" {
   type        = bool
   default     = true
 }
+
+variable "config_recorder_name" {
+  description = "Name of the AWS Config recorder. AWS allows one per region, so an account that already has one must keep its name (the dev account's is \"default\") and adopt it with an import block."
+  type        = string
+  default     = "shiptrack-recorder"
+}
+
+variable "config_delivery_channel_name" {
+  description = "Name of the AWS Config delivery channel. As with the recorder, an existing one keeps its name."
+  type        = string
+  default     = "shiptrack-delivery"
+}
+
+variable "manage_access_analyzer" {
+  description = "Create the account Access Analyzer. Turn it off when the account already has an account analyzer: AWS allows one per region."
+  type        = bool
+  default     = true
+}
+
+variable "inspector_timeout" {
+  description = "How long to wait for Inspector to finish enabling EC2 and ECR scanning."
+  type        = string
+  default     = "20m"
+}

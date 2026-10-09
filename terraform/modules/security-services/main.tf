@@ -166,7 +166,7 @@ resource "aws_iam_role_policy" "config_delivery" {
 }
 
 resource "aws_config_configuration_recorder" "this" {
-  name     = "${var.name_prefix}-recorder"
+  name     = var.config_recorder_name
   role_arn = aws_iam_role.config.arn
 
   recording_group {
@@ -186,7 +186,7 @@ resource "aws_config_configuration_recorder" "this" {
 }
 
 resource "aws_config_delivery_channel" "this" {
-  name           = "${var.name_prefix}-delivery"
+  name           = var.config_delivery_channel_name
   s3_bucket_name = var.cloudtrail_bucket_name
   s3_key_prefix  = "config"
 
@@ -227,6 +227,11 @@ resource "aws_securityhub_standards_subscription" "cis" {
 resource "aws_inspector2_enabler" "this" {
   account_ids    = [local.account]
   resource_types = ["EC2", "ECR"]
+
+  # Enabling EC2 scanning can take longer than the provider's five-minute default.
+  timeouts {
+    create = var.inspector_timeout
+  }
 }
 
 # Enhanced scanning with continuous re-scan, for every repository in the registry.
@@ -248,6 +253,8 @@ resource "aws_ecr_registry_scanning_configuration" "this" {
 # --- IAM Access Analyzer -------------------------------------------------------------------------
 
 resource "aws_accessanalyzer_analyzer" "this" {
+  count = var.manage_access_analyzer ? 1 : 0
+
   analyzer_name = "${var.name_prefix}-analyzer"
   type          = "ACCOUNT"
 }

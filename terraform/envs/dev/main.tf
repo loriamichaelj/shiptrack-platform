@@ -139,4 +139,22 @@ module "security_services" {
   sns_sev2_arn             = module.observability.sns_sev2_arn
   enable_pod_data_events   = var.enable_pod_data_events
   enable_guardduty_runtime = var.enable_guardduty_runtime
+
+  config_recorder_name         = var.config_recorder_name
+  config_delivery_channel_name = var.config_delivery_channel_name
+  manage_access_analyzer       = var.manage_access_analyzer
+}
+
+# The account already had a stopped AWS Config recorder and delivery channel, both named "default",
+# and AWS allows one of each per region. They are adopted here and then reconfigured by the module
+# (this role, all supported types, delivery to the CloudTrail bucket under config/). Once an apply has
+# imported them these blocks can be removed (ADR-0022).
+import {
+  to = module.security_services.aws_config_configuration_recorder.this
+  id = var.config_recorder_name
+}
+
+import {
+  to = module.security_services.aws_config_delivery_channel.this
+  id = var.config_delivery_channel_name
 }

@@ -178,3 +178,21 @@ variable "enable_guardduty_runtime" {
   type        = bool
   default     = true
 }
+
+variable "config_recorder_name" {
+  description = "Name of the account's AWS Config recorder. The account already has one named \"default\", which is adopted."
+  type        = string
+  default     = "default"
+}
+
+variable "config_delivery_channel_name" {
+  description = "Name of the account's AWS Config delivery channel. The account already has one named \"default\", which is adopted."
+  type        = string
+  default     = "default"
+}
+
+variable "manage_access_analyzer" {
+  description = "Create an account Access Analyzer. Off in dev: the account already has one."
+  type        = bool
+  default     = false
+}
