@@ -72,8 +72,11 @@ run "guardduty_features" {
       aws_guardduty_detector_feature.rds_login_events.status == "ENABLED",
       aws_guardduty_detector_feature.runtime.name == "RUNTIME_MONITORING",
       aws_guardduty_detector_feature.runtime.status == "ENABLED",
-      one(aws_guardduty_detector_feature.runtime.additional_configuration).name == "EKS_ADDON_MANAGEMENT",
-      one(aws_guardduty_detector_feature.runtime.additional_configuration).status == "ENABLED",
+      { for c in aws_guardduty_detector_feature.runtime.additional_configuration : c.name => c.status } == {
+        EKS_ADDON_MANAGEMENT         = "ENABLED"
+        ECS_FARGATE_AGENT_MANAGEMENT = "DISABLED"
+        EC2_AGENT_MANAGEMENT         = "DISABLED"
+      },
     ])
     error_message = "S3, EKS audit, RDS login, and Runtime Monitoring with automated EKS agent management."
   }
@@ -89,7 +92,7 @@ run "runtime_monitoring_can_be_turned_off" {
   assert {
     condition = alltrue([
       aws_guardduty_detector_feature.runtime.status == "DISABLED",
-      one(aws_guardduty_detector_feature.runtime.additional_configuration).status == "DISABLED",
+      alltrue([for c in aws_guardduty_detector_feature.runtime.additional_configuration : c.status == "DISABLED"]),
     ])
     error_message = "enable_guardduty_runtime = false turns the feature and its agent management off."
   }
@@ -116,6 +119,8 @@ run "config_records_daily_with_continuous_overrides" {
       aws_config_delivery_channel.this.s3_key_prefix == "config",
       aws_config_configuration_recorder_status.this.is_enabled,
       aws_iam_role.config.name == "testowner-dev-shiptrack-platform-config",
+      aws_config_configuration_recorder.this.name == "shiptrack-recorder",
+      aws_config_delivery_channel.this.name == "shiptrack-delivery",
     ])
     error_message = "Config delivers to the CloudTrail bucket under config/, runs, and uses a role named under the prefix."
   }
@@ -142,7 +147,7 @@ run "inspector_and_access_analyzer" {
       aws_inspector2_enabler.this.resource_types == toset(["EC2", "ECR"]),
       aws_ecr_registry_scanning_configuration.this.scan_type == "ENHANCED",
       one(aws_ecr_registry_scanning_configuration.this.rule).scan_frequency == "CONTINUOUS_SCAN",
-      aws_accessanalyzer_analyzer.this.type == "ACCOUNT",
+      one(aws_accessanalyzer_analyzer.this).type == "ACCOUNT",
     ])
     error_message = "Inspector scans EC2 and ECR (enhanced, continuous), and an account analyzer runs."
   }
@@ -159,5 +164,45 @@ run "serious_findings_go_to_the_sev2_topic" {
       aws_cloudwatch_event_target.findings.arn == var.sns_sev2_arn,
     ])
     error_message = "New CRITICAL and HIGH findings reach the SEV2 topic."
+  }
+}
+
+run "an_existing_config_setup_keeps_its_names" {
+  command = plan
+
+  variables {
+    config_recorder_name         = "default"
+    config_delivery_channel_name = "default"
+  }
+
+  assert {
+    condition = alltrue([
+      aws_config_configuration_recorder.this.name == "default",
+      aws_config_delivery_channel.this.name == "default",
+      aws_config_configuration_recorder_status.this.name == "default",
+    ])
+    error_message = "The names are variables, so an existing recorder and channel can be adopted under their own names."
+  }
+}
+
+run "no_second_access_analyzer_when_the_account_has_one" {
+  command = plan
+
+  variables {
+    manage_access_analyzer = false
+  }
+
+  assert {
+    condition     = length(aws_accessanalyzer_analyzer.this) == 0
+    error_message = "manage_access_analyzer = false creates no analyzer."
+  }
+}
+
+run "inspector_waits_longer_than_the_default" {
+  command = plan
+
+  assert {
+    condition     = var.inspector_timeout == "20m"
+    error_message = "Enabling EC2 scanning can take longer than five minutes."
   }
 }

@@ -14,6 +14,6 @@ output "config_recorder_name" {
 }
 
 output "access_analyzer_arn" {
-  description = "ARN of the account analyzer."
-  value       = aws_accessanalyzer_analyzer.this.arn
+  description = "ARN of the account analyzer this module created, or null when the account's own is used."
+  value       = one(aws_accessanalyzer_analyzer.this[*].arn)
 }

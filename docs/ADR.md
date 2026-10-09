@@ -265,3 +265,18 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - Findings routing is one EventBridge rule, new CRITICAL and HIGH findings to the SEV2 topic. The topic policy (P5) already lets EventBridge publish.
 
 **Consequences:** An account that already has a GuardDuty detector, a Config recorder, or Security Hub enabled makes the first apply fail on "already exists"; the fix is to import the existing resource, not to disable it. Runtime Monitoring bills per vCPU once the EKS cluster runs. The register template is `docs/security/findings-register.md`.
+
+## ADR-0022: adopt-the-accounts-existing-security-services
+
+**Status:** Accepted
+
+**Context:** The first P4 apply created 11 of 21 resources. It failed on three: the account already has an AWS Config recorder and delivery channel, both named `default` (AWS allows one of each per region), and an account Access Analyzer (one per type per region). The recorder is stopped and not recording all types, so nothing relies on it. The Inspector enabler also timed out while EC2 scanning was still enabling.
+
+**Decision:**
+- AWS Config: the existing recorder and delivery channel are adopted with `import` blocks in `terraform/envs/dev` and keep their names, which are now module variables. The module then reconfigures them: this role, all supported resource types recorded daily (IAM and security groups continuously), delivery to the CloudTrail bucket under `config/`, and recording started. The previous delivery bucket stops receiving anything. Security Hub follows because its controls need Config.
+- Access Analyzer: a second account analyzer is not created. The account's own satisfies design §6.7. `manage_access_analyzer` is off in `dev`; the module still creates one where the account has none.
+- Inspector: the enabler waits up to 20 minutes (`inspector_timeout`). A resource that timed out while waiting is tainted in state, so the next plan may replace it, which disables and enables scanning again.
+- The `import` blocks are removed in a later change, once an apply has imported the two resources.
+- `.github/workflows/inspect-account.yml` stays as a read-only diagnostic that lists these services by name and status, without ARNs or account IDs.
+
+**Consequences:** The Config setup that existed before this project is changed. The old `config-bucket-*` bucket is left as it is. A fresh account without these services needs the defaults (`shiptrack-recorder`, `shiptrack-delivery`, `manage_access_analyzer = true`) and no import blocks.

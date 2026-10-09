@@ -32,3 +32,9 @@ cutover = {
 
 enable_pod_data_events   = false
 enable_guardduty_runtime = true
+
+# The account already has a stopped AWS Config recorder and delivery channel, both named "default",
+# and an account Access Analyzer; AWS allows one of each per region (ADR-0022).
+config_recorder_name         = "default"
+config_delivery_channel_name = "default"
+manage_access_analyzer       = false

@@ -78,18 +78,36 @@ resource "aws_guardduty_detector_feature" "s3" {
   detector_id = aws_guardduty_detector.this.id
   name        = "S3_DATA_EVENTS"
   status      = "ENABLED"
+
+  # This feature has no settings of its own here. AWS reports agent-management settings on it, which
+  # would otherwise show as a difference in every plan.
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 resource "aws_guardduty_detector_feature" "eks_audit_logs" {
   detector_id = aws_guardduty_detector.this.id
   name        = "EKS_AUDIT_LOGS"
   status      = "ENABLED"
+
+  # This feature has no settings of its own here. AWS reports agent-management settings on it, which
+  # would otherwise show as a difference in every plan.
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 resource "aws_guardduty_detector_feature" "rds_login_events" {
   detector_id = aws_guardduty_detector.this.id
   name        = "RDS_LOGIN_EVENTS"
   status      = "ENABLED"
+
+  # This feature has no settings of its own here. AWS reports agent-management settings on it, which
+  # would otherwise show as a difference in every plan.
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 resource "aws_guardduty_detector_feature" "runtime" {
@@ -100,6 +118,18 @@ resource "aws_guardduty_detector_feature" "runtime" {
   additional_configuration {
     name   = "EKS_ADDON_MANAGEMENT"
     status = var.enable_guardduty_runtime ? "ENABLED" : "DISABLED"
+  }
+
+  # AWS reports all three agent-management settings for this feature, so all three are stated;
+  # leaving two out makes every plan show a difference. Only EKS is used here.
+  additional_configuration {
+    name   = "ECS_FARGATE_AGENT_MANAGEMENT"
+    status = "DISABLED"
+  }
+
+  additional_configuration {
+    name   = "EC2_AGENT_MANAGEMENT"
+    status = "DISABLED"
   }
 }
 
@@ -166,7 +196,7 @@ resource "aws_iam_role_policy" "config_delivery" {
 }
 
 resource "aws_config_configuration_recorder" "this" {
-  name     = "${var.name_prefix}-recorder"
+  name     = var.config_recorder_name
   role_arn = aws_iam_role.config.arn
 
   recording_group {
@@ -186,7 +216,7 @@ resource "aws_config_configuration_recorder" "this" {
 }
 
 resource "aws_config_delivery_channel" "this" {
-  name           = "${var.name_prefix}-delivery"
+  name           = var.config_delivery_channel_name
   s3_bucket_name = var.cloudtrail_bucket_name
   s3_key_prefix  = "config"
 
@@ -227,6 +257,11 @@ resource "aws_securityhub_standards_subscription" "cis" {
 resource "aws_inspector2_enabler" "this" {
   account_ids    = [local.account]
   resource_types = ["EC2", "ECR"]
+
+  # Enabling EC2 scanning can take longer than the provider's five-minute default.
+  timeouts {
+    create = var.inspector_timeout
+  }
 }
 
 # Enhanced scanning with continuous re-scan, for every repository in the registry.
@@ -248,6 +283,8 @@ resource "aws_ecr_registry_scanning_configuration" "this" {
 # --- IAM Access Analyzer -------------------------------------------------------------------------
 
 resource "aws_accessanalyzer_analyzer" "this" {
+  count = var.manage_access_analyzer ? 1 : 0
+
   analyzer_name = "${var.name_prefix}-analyzer"
   type          = "ACCOUNT"
 }
