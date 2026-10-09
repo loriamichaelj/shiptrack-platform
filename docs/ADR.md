@@ -137,3 +137,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** Every IAM role, instance profile, and customer managed policy is named under a role prefix, `<owner>-<environment>-<project>`, supplied as the `role_prefix` Terraform variable and the `ROLE_PREFIX` repository variable; nothing hardcodes it. The nine deploy roles and the permission boundary are `<PREFIX>-<stack>-<purpose>` and `<PREFIX>-workload-boundary` for the `dev` environment. The hand-made seed role is `<owner>-bootstrap-<project>-seed`, supplied as `seed_role_name` and `SEED_ROLE_NAME`. The IAM scopes of the pipeline roles follow the prefix: platform `<PREFIX>-*`, legacy `<PREFIX>-legacy-*`, modern `<PREFIX>-modern-*`. Non-IAM resources (state bucket, key aliases, log groups, alarms, S3 buckets) keep their `shiptrack-` names. This replaces the `shiptrack-*` role and seed role names in ADR-0005.
 
 **Consequences:** The convention is changed in one variable. The prefix must be 2 to 40 characters so role names stay within the 64-character IAM limit. `ROLE_PREFIX` must be consistent with the `Environment` the roles trust, because the deploy roles' trust and the prefix are set independently. The legacy and modern Terraform must name their roles under the prefix or the apply roles are denied.
+
+## ADR-0012: immutable-oidc-subjects
+
+**Status:** Accepted
+
+**Context:** The three repositories issue OIDC tokens with an immutable subject: `repo:<owner>@<owner-id>/<repo>@<repo-id>:<suffix>`. The trust policies were written for the name-only subject and would never match.
+
+**Decision:** The deploy roles and the seed role trust the immutable subject. Bootstrap takes the owner ID from the workflow context (`github.repository_owner_id`) and the repository IDs from the `REPO_IDS` repository variable on the platform repository. The IDs are public and carry no account information.
+
+**Consequences:** A renamed or transferred repository keeps its trust only if its IDs are unchanged, and a deleted and recreated repository does not inherit it. The documented subject forms cover branch refs; the `environment` and `pull_request` suffixes follow the same pattern but are not shown in GitHub's documentation, so the first real run confirms them **[VERIFY]**.
