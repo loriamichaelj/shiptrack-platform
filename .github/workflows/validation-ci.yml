@@ -1,0 +1,93 @@
+name: validation-ci
+
+# Checks the validation tooling and the scripts that gate Terraform: lint and tests for the contract
+# suite and the simulator, `k6 inspect` for each load scenario, and the shell tests. None of this
+# needs AWS, so it also runs for pull requests from forks.
+
+on:
+  pull_request:
+    paths:
+      - "validation/**"
+      - "scripts/**"
+      - ".github/workflows/validation-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.22"
+  K6_VERSION: "2.3.0"
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: validation/contract
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - run: uv sync --frozen
+      - name: Lint
+        run: uvx --from ruff==0.9.10 ruff check .
+      - name: Collect the tests (every endpoint in legacy section 3.4 must be covered)
+        run: uv run --frozen pytest --collect-only -q
+      - name: Check endpoint coverage
+        run: uv run --frozen pytest tests/test_endpoint_coverage.py -q
+
+  simulator:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: validation/simulator
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen pytest -q
+      - name: The wheel builds
+        run: uv build --wheel
+
+  loadtest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1.2.1
+        with:
+          k6-version: ${{ env.K6_VERSION }}
+      - name: k6 inspect
+        working-directory: validation/loadtest
+        run: |
+          for scenario in baseline stress soak; do
+            k6 inspect "$scenario.js" >/dev/null
+            echo "$scenario.js is valid"
+          done
+
+  scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: shellcheck -x scripts/*.sh scripts/tests/*.sh
+      - name: Test terraform-ci.sh against fake aws and terraform
+        run: scripts/tests/test_terraform_ci.sh

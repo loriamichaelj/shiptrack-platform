@@ -1,0 +1,40 @@
+[project]
+name = "shiptrack-simulator"
+version = "0.1.0"
+description = "A carrier event simulator for ShipTrack, with a ledger that proves which accepted events were lost."
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28,<1",
+]
+
+[project.optional-dependencies]
+# `verify` runs on a host inside the VPC, where the release virtualenv already has psycopg. Install
+# the wheel there with --no-deps; this extra is for running verify anywhere else.
+verify = ["psycopg[binary]>=3.2,<4"]
+
+[project.scripts]
+shiptrack-sim = "shiptrack_simulator.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shiptrack_simulator"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<10",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

@@ -1,0 +1,88 @@
+name: drift
+
+# Every night, plans terraform/envs/dev and compares it with what is deployed. Changes mean someone
+# changed AWS outside the pipeline (a break-glass weight change, for example), and the platform
+# reconciles them within 24 hours (design risk R-06). The result is a GitHub issue, so it is seen.
+#
+# It runs on `dev` without an environment, so the plan role's `ref:refs/heads/dev` trust applies.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drift
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.16.4"
+  ISSUE_TITLE: "Drift detected: platform/dev"
+
+jobs:
+  drift:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Plan
+        id: plan
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          TF_VAR_owner: ${{ github.repository_owner }}
+          TF_VAR_role_prefix: ${{ vars.ROLE_PREFIX }}
+          TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
+          TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
+          SUMMARY_FILE: ${{ runner.temp }}/drift-summary.md
+        run: |
+          # 0 = no changes, 2 = drift, 1 = the plan itself failed (and fails this job).
+          rc=0
+          scripts/terraform-ci.sh drift || rc=$?
+          echo "rc=$rc" >>"$GITHUB_OUTPUT"
+          if [[ "$rc" -eq 1 ]]; then exit 1; fi
+      - name: Open, update, or close the drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RC: ${{ steps.plan.outputs.rc }}
+          SUMMARY_FILE: ${{ runner.temp }}/drift-summary.md
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")
+          if [[ "$RC" -eq 2 ]]; then
+            {
+              echo "The nightly plan of \`terraform/envs/dev\` found changes. Something in AWS differs from the code."
+              echo
+              echo "Reconcile within 24 hours: either apply the code, or change the code to match what was done by hand."
+              echo
+              echo "Addresses and actions only (no values). Latest run: $RUN_URL"
+              echo
+              cat "$SUMMARY_FILE"
+            } >"$RUNNER_TEMP/issue.md"
+            if [[ -n "$number" ]]; then
+              gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/issue.md"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/issue.md"
+            fi
+          elif [[ -n "$number" ]]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "The nightly plan is clean again. Run: $RUN_URL"
+          fi

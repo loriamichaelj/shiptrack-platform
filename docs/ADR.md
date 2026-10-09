@@ -280,3 +280,20 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - `.github/workflows/inspect-account.yml` stays as a read-only diagnostic that lists these services by name and status, without ARNs or account IDs.
 
 **Consequences:** The Config setup that existed before this project is changed. The old `config-bucket-*` bucket is left as it is. A fresh account without these services needs the defaults (`shiptrack-recorder`, `shiptrack-delivery`, `manage_access_analyzer = true`) and no import blocks.
+
+## ADR-0023: validation-tooling-and-the-nightly-drift-check
+
+**Status:** Accepted
+
+**Context:** P6b and P7 add the contract suite, the simulator, the k6 scenarios, and the workflows that run them and watch for drift. Several details were left open.
+
+**Decision:**
+- The contract suite is checked against the real legacy application, not only by reading the spec: it was run against a local instance and found the real behaviour (a malformed shipment id is a plain 404, an over-long idempotency key is a 422 validation error, event ingestion is asynchronous so the suite polls the track view). `SINGLE_STACK=1` lets the POD tests run when `BASE_URL` points straight at one stack and not at the ALB; without it they need `TARGET` set, as the design requires.
+- A test fails if any endpoint in the legacy §3.4 table has no test, so the suite cannot quietly fall behind the spec.
+- `validation.yml` adds a fourth suite, `contract-ui-parity`, for cutover gate G6, and runs `contract-full` without the parity tests, which need both stacks. It uploads nothing: a failure message can contain the ALB address, which is masked in the log but not in a file.
+- The simulator's `verify` imports only `psycopg` and takes no other dependency, so the wheel is installed on a host with `--no-deps` and uses the release virtualenv's `psycopg`. Its ledger holds one line per accepted (202) event and is written as each event is accepted.
+- `drift.yml` runs nightly on `dev` with the plan role (no environment, so the `ref:refs/heads/dev` trust applies). `terraform-ci.sh drift` exits 0, 2, or 1; exit 2 opens or updates one issue, "Drift detected: platform/dev", with addresses and actions only, and a clean plan closes it. Exit 1 fails the job.
+- `validation-ci.yml` runs on pull requests that touch `validation/` or `scripts/`: lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests, including `scripts/tests/test_terraform_ci.sh`, which checks the drift exit codes and the masking of identifiers against fake `aws` and `terraform` programs.
+- The k6 summary JSON holds metrics only, with no URLs or headers; routes are tagged by name, not by address.
+
+**Consequences:** The UI checks cannot be run against the bare application process, because nginx serves `/ui/` in legacy; they run against a deployed stack. The k6 baseline against the bare application shows its UI iterations as failures for the same reason.
