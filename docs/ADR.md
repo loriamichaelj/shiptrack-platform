@@ -27,6 +27,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0021 | `p4-security-services` | Accepted |
 | 0022 | `adopt-the-accounts-existing-security-services` | Accepted |
 | 0023 | `carrier-event-simulator` | Accepted |
+| 0024 | `composite-alarms-need-an-unscoped-grant` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -308,4 +309,14 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - The simulator is consumed by the other repositories by checking this one out at a pinned commit; the repository is public, so no token is needed.
 
 **Consequences:** A run writes real shipments and events into the target's database, so it is run deliberately. The ledger holds shipment IDs and tracking numbers, so it stays on the runner or in the private artifact bucket and is not committed.
+
+## ADR-0024: composite-alarms-need-an-unscoped-grant
+
+**Status:** Accepted
+
+**Context:** The first modern apply failed creating the two availability burn-rate composite alarms with `AccessDenied`, although the modern apply role was allowed `cloudwatch:PutCompositeAlarm` on `alarm:shiptrack-modern-*`. The CloudWatch API reference says the caller must hold that permission scoped to `*`, and that a narrower scope cannot create a composite alarm. Metric alarms in the same statement were created without trouble.
+
+**Decision:** `cloudwatch:PutCompositeAlarm` moves out of the `AlarmsAndDashboards` statement into its own `CompositeAlarms` statement in `bootstrap/policies/modern.tf`, with `Resource: *` and an `aws:RequestedRegion` condition. Everything else in the statement stays scoped to `shiptrack-modern-*`. Only the modern apply role gets it; legacy and platform create no composite alarms.
+
+**Consequences:** The modern pipeline can create a composite alarm of any name in the region. A composite alarm only reads the state of other alarms and notifies the actions it names, so the exposure is a misleading alarm, not access to data or resources. The change reaches the role through `bootstrap-apply.yml`, run by hand in the `bootstrap` environment. If CloudWatch ever accepts a scoped grant, the statement can fold back into `AlarmsAndDashboards`.
 

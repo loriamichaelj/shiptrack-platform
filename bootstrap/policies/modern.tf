@@ -60,7 +60,6 @@ data "aws_iam_policy_document" "modern_apply" {
     actions = [
       "cloudwatch:PutMetricAlarm",
       "cloudwatch:DeleteAlarms",
-      "cloudwatch:PutCompositeAlarm",
       "cloudwatch:EnableAlarmActions",
       "cloudwatch:DisableAlarmActions",
       "cloudwatch:PutDashboard",
@@ -72,6 +71,21 @@ data "aws_iam_policy_document" "modern_apply" {
       "arn:${local.p}:cloudwatch:${local.r}:${local.a}:alarm:shiptrack-modern-*",
       "arn:${local.p}:cloudwatch::${local.a}:dashboard/shiptrack-modern-*",
     ]
+  }
+
+  # CloudWatch refuses PutCompositeAlarm unless it is granted on "*"; a narrower resource is an
+  # AccessDenied with no detail (API reference, PutCompositeAlarm). The region is the only scope
+  # left, and the alarms themselves are still named shiptrack-modern-* by modern's Terraform.
+  statement {
+    sid       = "CompositeAlarms"
+    actions   = ["cloudwatch:PutCompositeAlarm"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.r]
+    }
   }
 
   # Every role must carry the workload boundary.
