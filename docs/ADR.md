@@ -34,6 +34,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0028 | `cutover-controls-as-workflows` | Accepted |
 | 0029 | `findings-gate-covers-modern-only` | Accepted |
 | 0030 | `cutover-steps-gated-by-evidence-not-durations` | Accepted |
+| 0031 | `g3-per-route-with-an-event-route-allowance` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -404,3 +405,15 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Consequences:** The migration can complete as fast as the gates allow. A fault that shows only over hours (a nightly job, a connection leak, a cache expiry, a daily traffic shape) is not caught by a gate that passes in minutes, and the 7-day legacy retention that served as a second rollback window is gone: after the wave 3 contract migration rollback is forward-fix only, as before, and the only remaining safety net before it is `rollback-cutover.yml`. The alarms, the nightly drift check and the SLO burn alarms keep running after each step, so a late fault still pages; it just no longer holds the next step back.
 
+## ADR-0031: g3-per-route-with-an-event-route-allowance
+
+**Status:** Accepted
+
+**Context:** G3 was "tg-modern p95 ≤ 1.2 × tg-legacy p95", read from the target-group aggregate. At 100% of writes (wave 2, step 2d) it read 18.6 ms against 13.3 ms, 1.40, and failed. The same-runner comparison (`k6-baseline` with `TARGET=both`) shows why: track is 0.98 at p95, creation 1.15, the UI shell 1.12, and `POST /events` 2.76 (36.9 ms against 13.4 ms). That route waits for SQS before it answers `202`, because modern never acknowledges an event it has not durably queued (modern REM-06); legacy answers from an in-process queue (AP-06), which is the defect the migration removes. Events are 15% of the mix, so the aggregate moves.
+
+**Decision:**
+- G3 is judged per route from one runner, with `k6-baseline` and `TARGET=both`: every route's p95 is at most 1.2 times legacy's, except `POST /events`.
+- `POST /api/v1/shipments/{id}/events` is allowed a p95 of at most legacy's plus 50 ms. The measured gap was 23.5 ms in this environment, and 30 ms with a more distant runner; the bound has margin over both.
+- The target-group figure from `cutover-gates.yml` is still printed and is information, because it mixes route shares that change as the weights move.
+
+**Consequences:** The allowance is the price of durable event ingestion, written down, instead of a failure that stays open. It is only measured on a short synthetic run, so a regression in the other routes is still caught at 1.2, and a regression in the event route past 50 ms is caught as well. The aggregate can read above 1.2 with every route within its bound. Reducing the gap (a shared SQS client, a regional endpoint) is a performance task and does not block the migration.

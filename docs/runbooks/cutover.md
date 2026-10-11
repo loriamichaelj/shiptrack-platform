@@ -38,7 +38,7 @@ weights. Changing the weights **is** the cutover, so each change is a pull reque
 |---|---|---|
 | G1 Correctness | The contract suite passes against `TARGET=modern` | `validation.yml` `contract-full` |
 | G2 Errors | tg-modern 5xx ratio is at most tg-legacy's plus 0.5 pp | `cutover-gates.yml` |
-| G3 Latency | tg-modern p95 is at most 1.2 times tg-legacy's | `cutover-gates.yml` |
+| G3 Latency | Per route, from one runner: p95 at most 1.2 times legacy's, except `POST /events`, which is at most legacy's plus 50 ms (ADR-0031) | `validation.yml` `k6-baseline` with target `both`; `cutover-gates.yml` prints the target-group p95 as information |
 | G4 Stability | No SEV1 alarm, no pod restarts from the release | `cutover-gates.yml` |
 | G5 Async health (wave 2 on) | Events queue age under 60 s, dead-letter queues empty | `cutover-gates.yml` with wave 2 |
 | G6 UI build parity (before wave 1) | Both stacks serve identical hashed UI asset names | `validation.yml` `contract-ui-parity` |
