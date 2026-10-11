@@ -73,7 +73,10 @@ Entry: platform applied; modern cluster, add-ons, and release deployed.
 1. `validation.yml`: `contract-full` with target `modern`, then `contract-ui-parity` (G6).
 2. `validation.yml`: `k6-baseline` with target `legacy`, then with target `modern`. The two summaries
    are the G2 and G3 baseline.
-3. `security-findings.yml`: no fixable CRITICAL or HIGH.
+3. `security-findings.yml`: no fixable CRITICAL or HIGH. The table splits findings into ShipTrack's
+   own resources (an ECR repository named `shiptrack/...`, or a resource tagged `Project=shiptrack`)
+   and the rest of the account, so a finding in another team's image is visible but is not mistaken
+   for ShipTrack's.
 4. Confirm the alarms are in `OK` and the `shiptrack-cutover` dashboard shows both target groups.
 
 Exit: contract green, k6 thresholds met (`http_req_failed < 1%`, `p(95) < 500 ms`), G6 passed, no

@@ -32,7 +32,13 @@ while :; do
         --filter-criteria '{"findingStatus":[{"comparison":"EQUALS","value":"ACTIVE"}]}' --output json)
   [[ -n "$token" ]] && args+=(--next-token "$token")
   aws "${args[@]}" >"$work/page.json"
-  jq -c '[(.findings // [])[] | {severity, fixAvailable, title, resources: [(.resources[0] // {}) | {type}]}]' \
+  jq -c '[(.findings // [])[] | (.resources[0] // {}) as $r
+          | {severity, fixAvailable, title, resources: [{type: $r.type}],
+             scope: (if (($r.details.awsEcrContainerImage.repositoryName // "") | startswith("shiptrack/"))
+                        or (($r.tags.Project // "") == "shiptrack")
+                     then "shiptrack" else "other" end),
+             repo: (if (($r.details.awsEcrContainerImage.repositoryName // "") | startswith("shiptrack/"))
+                    then $r.details.awsEcrContainerImage.repositoryName else null end)}]' \
     "$work/page.json" >"$work/slim.json"
   jq -sc '.[0] + .[1]' "$work/all.json" "$work/slim.json" >"$work/next.json"
   mv "$work/next.json" "$work/all.json"
@@ -42,6 +48,9 @@ done
 findings=$(cat "$work/all.json")
 
 total=$(jq 'length' <<<"$findings")
+fixable_shiptrack=$(jq '[.[] | select(.scope == "shiptrack")
+                            | select(.severity == "CRITICAL" or .severity == "HIGH")
+                            | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length' <<<"$findings")
 fixable=$(jq '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
                    | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length' <<<"$findings")
 
@@ -59,7 +68,15 @@ fixable=$(jq '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
   echo "|---|---|"
   jq -r 'group_by(.resources[0].type) | map("| \(.[0].resources[0].type // "unknown") | \(length) |") | .[]' <<<"$findings"
   echo
-  echo "Total active: $total. **Fixable CRITICAL or HIGH: $fixable.**"
+  echo "By scope (ShipTrack is an ECR repository named shiptrack/... or a resource tagged Project=shiptrack;"
+  echo "anything else in the account is \"other\"):"
+  echo
+  echo "| Scope | Resource type | Fixable CRITICAL or HIGH | All active |"
+  echo "|---|---|---|---|"
+  jq -r 'group_by([.scope, .resources[0].type])
+         | map("| \(.[0].scope) | \(.[0].resources[0].type // "unknown") | \([.[] | select(.severity == "CRITICAL" or .severity == "HIGH") | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length) | \(length) |") | .[]' <<<"$findings"
+  echo
+  echo "Total active: $total. **Fixable CRITICAL or HIGH: $fixable** ($fixable_shiptrack in ShipTrack's own resources)."
   if [[ "$fixable" -gt 0 ]]; then
     echo
     echo "Fixable CRITICAL and HIGH, by title:"
