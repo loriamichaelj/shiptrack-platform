@@ -123,18 +123,20 @@ Entry: wave 2 at 100% with G1 to G5 passing. Set legacy's `RUN_MIGRATIONS` repos
 then deploy modern with `migrations.enabled=true`; the migration job at head is a no-op. Rollback:
 revert both flags. Details: modern design §9.1.
 
-### Wave 3: scheduled jobs and decommission
+### Wave 3: scheduled jobs, with legacy kept as the fallback
 
 Entry: handoff complete. In order, as in modern design §9.2:
 
 1. Remove `/etc/cron.d/shiptrack-sla` and `/etc/cron.d/shiptrack-podsync` from the legacy hosts.
 2. Turn the modern CronJob on (`slaScan.suspend=false`) and enable its heartbeat alarm.
 3. Verify exactly one alert per breach.
-4. **Contract migration** (three Alembic revisions). **This is the point of no return for rolling
-   back to legacy: after it, forward-fix only.** Before it, re-enable legacy's cron and suspend the
-   CronJob.
-5. Legacy Auto Scaling group to 0 (a legacy pull request).
-6. Once steps 3 and 4 are verified: destroy the legacy stack and remove the `tg-legacy` routing (a platform pull request).
+4. The contract migration is not taken (modern ADR-0023), so there is no point of no return.
+5. Legacy is not scaled down and nothing is destroyed (ADR-0032): it keeps its hosts and `tg-legacy`,
+   and its UI stays on the preview port.
+
+To fall back to legacy: suspend the modern CronJob first (`slaScan.suspend=true`, a modern deploy),
+then `legacy-cron.yml restore-sla`, then route with `rollback-cutover.yml`. Restoring legacy's cron
+while the CronJob is live lets two scanners alert twice (AP-09).
 
 ## Roll back
 
@@ -142,7 +144,7 @@ Entry: handoff complete. In order, as in modern design §9.2:
 |---|---|
 | A gate fails or an alarm fires while a step is being judged, and there is time | Pull request restoring the previous weights; merge; approve the apply |
 | User impact now | `rollback-cutover.yml` (all weighted routing to legacy 100), then the pull request within 24 hours |
-| After wave 3 step 4 | Forward-fix only. Do not route back to legacy |
+| After wave 3 | Legacy is still running and `rollback-cutover.yml` still works. Suspend modern's CronJob before restoring legacy's SLA cron |
 
 ## Alarms
 

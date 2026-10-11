@@ -82,12 +82,12 @@ listener is outside the cutover weights (ADR-0026). Delete the secret and apply 
 | P6 scrub and local checks | Done: `scrub.yml`, `.gitleaks.toml`, `.pre-commit-config.yaml`, `.tflint.hcl`, `.checkov.yaml` |
 | P1 Network and KMS | Done and applied |
 | P2 Database | Done and applied; the database is bootstrapped (see the runbook) |
-| P3 Storage and ingress | Done and applied; weights are 100% legacy, 0% modern |
+| P3 Storage and ingress | Done and applied; `track` and `default` are both at modern 100, and the preview port shows legacy (ADR-0032) |
 | P5 Observability and contract | Done and applied |
 | P4 Security services | Done and applied. Config is adopted and recording, and the Inspector enabler and ECR scanning configuration are created (ADR-0022) |
-| P6b Drift and validation workflows | On `dev`: `drift.yml`, `validation.yml`, `validation-ci.yml` (ADR-0027). Not yet run live |
+| P6b Drift and validation workflows | Done and in use: `drift.yml`, `validation.yml`, `validation-ci.yml` (ADR-0027) |
 | P7 Validation tooling | On `dev`: the simulator, which has seeded the legacy stack, the contract suite, and the k6 scenarios. The contract suite is what modern's `deploy.yml` runs as its smoke test |
-| P8 Runbooks | `docs/runbooks/cutover.md` and `docs/runbooks/break-glass-rollback.md` are written. The wave 2 section depends on legacy L5 and L6 tooling that is not built yet |
+| P8 Runbooks | `docs/runbooks/cutover.md` and `docs/runbooks/break-glass-rollback.md` are written and were used for the cutover, which is complete. The runbooks are still to be iterated |
 
 ## Local checks
 
