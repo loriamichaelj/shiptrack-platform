@@ -33,6 +33,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0027 | `validation-tooling-and-the-nightly-drift-check` | Accepted |
 | 0028 | `cutover-controls-as-workflows` | Accepted |
 | 0029 | `findings-gate-covers-modern-only` | Accepted |
+| 0030 | `cutover-steps-gated-by-evidence-not-durations` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -389,4 +390,17 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - A finding is fixable when Inspector reports `fixAvailable` as `YES` or `PARTIAL`, as before.
 
 **Consequences:** The criterion measures what modern deploys, and nobody else's resources can block a wave. The scope comes from tags and a repository prefix, so a modern resource that carries none of them is counted as other and would not fail the gate: a new kind of resource needs its tag checked here. Legacy's findings are not gated, which is correct for a stack whose AMI is pinned on purpose, and they are the "before" number for the assessment.
+
+## ADR-0030: cutover-steps-gated-by-evidence-not-durations
+
+**Status:** Accepted
+
+**Context:** The design held each weight step for 30 minutes, held wave 2 at 100% for 24 hours before the schema handoff, and kept legacy for 7 days before destroying it. The person running the migration decided that the migration is to be finished in one working session, and that the steps are to be gated by what the gates measure, not by elapsed time.
+
+**Decision:**
+- A weight step is judged over an **evidence window** in which each target group saw at least `MIN_REQUESTS` requests (default 100). With less, a gate says `NO DATA`, which is not a pass, and the step does not advance.
+- A step advances when G1 to G4 pass (G5 from wave 2). The handoff starts when wave 2 is at 100% with G1 to G5 passing, and legacy is destroyed once the wave 3 checks (one alert per breach, contract migration applied) are verified.
+- No fixed duration is part of the design. `window_minutes` stays a parameter of `cutover-gates.yml`, because a window is how a gate is measured; the operator sets it to cover the load.
+
+**Consequences:** The migration can complete as fast as the gates allow. A fault that shows only over hours (a nightly job, a connection leak, a cache expiry, a daily traffic shape) is not caught by a gate that passes in minutes, and the 7-day legacy retention that served as a second rollback window is gone: after the wave 3 contract migration rollback is forward-fix only, as before, and the only remaining safety net before it is `rollback-cutover.yml`. The alarms, the nightly drift check and the SLO burn alarms keep running after each step, so a late fault still pages; it just no longer holds the next step back.
 

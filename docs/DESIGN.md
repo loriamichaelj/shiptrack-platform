@@ -548,7 +548,7 @@ These tools own the **shared definition of correct** for both stacks.
 - **`terraform-apply.yml`** (push to `dev`): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
 - **`drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
 - **`rollback-cutover.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Break-glass: legacy = 100, modern = 0 on every weighted rule and the default action, without a pull request (ADR-0028).
-- **`cutover-gates.yml`** and **`security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over a soak window from CloudWatch; the second summarises Inspector and Security Hub findings by scope (modern, legacy, other) and fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). Both print numbers and titles only (ADR-0028).
+- **`cutover-gates.yml`** and **`security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over an evidence window from CloudWatch; the second summarises Inspector and Security Hub findings by scope (modern, legacy, other) and fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). Both print numbers and titles only (ADR-0028).
 - **`unlock-state.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Removes a stale state lock given its ID, and refuses a lock with another ID or one younger than 30 minutes (ADR-0025).
 - Every workflow that plans or applies `terraform/envs/dev` passes the preview CIDR secret and registers each address with `add-mask` before any step can print it (ADR-0026).
 - All workflows: `permissions: { id-token: write, contents: read, pull-requests: write }` (minimum per job). No long-lived AWS keys exist anywhere.
@@ -572,15 +572,15 @@ All three repositories are public.
 - Exact PR diffs for each weight step
 - The go/no-go gates below
 
-| Gate | Criterion (measured on `shiptrack-cutover` dashboard over the soak window) |
+| Gate | Criterion (measured on `shiptrack-cutover` dashboard over the evidence window) |
 |---|---|
 | G1 Correctness | Contract suite passes against `TARGET=modern` |
 | G2 Errors | tg-modern 5xx ratio ≤ tg-legacy 5xx ratio + 0.5 pp |
 | G3 Latency | tg-modern p95 ≤ 1.2 × tg-legacy p95 |
-| G4 Stability | No SEV1 alarm during soak; no pod restarts attributable to the release |
+| G4 Stability | No SEV1 alarm in the evidence window; no pod restarts attributable to the release |
 | G5 Async health (Wave 2+) | Events queue age < 60 s, DLQ = 0 |
 | G6 UI build parity (before Wave 1) | `ui_parity` check passes: both stacks serve identical hashed UI asset filenames |
-| Soak | 30 min per weight step |
+| Evidence window | A weight step is judged over a window in which each target group saw at least `MIN_REQUESTS` requests (default 100). A gate without that much traffic is `NO DATA`, never a pass |
 
 Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui/*` together). Wave 2 `default` 10 → 25 → 50 → 100.
 
