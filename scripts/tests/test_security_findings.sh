@@ -27,7 +27,7 @@ failures=0
 
 finding() { # finding <severity> <fix> <title>
   jq -nc --arg s "$1" --arg f "$2" --arg t "$3" \
-    '{severity:$s,fixAvailable:$f,title:$t,resources:[{type:"AWS_ECR_CONTAINER_IMAGE",id:"arn:aws:ecr:us-east-1:123456789012:repository/x"}]}'
+    '{severity:$s,fixAvailable:$f,title:$t,resources:[{type:"AWS_ECR_CONTAINER_IMAGE",id:"arn:aws:ecr:us-east-1:123456789012:repository/x",details:{awsEcrContainerImage:{repositoryName:"shiptrack/app"}}}]}'
 }
 
 run() {
@@ -48,19 +48,19 @@ echo '{"Findings":[]}' >"$FAKE_HUB"
 
 # no findings at all
 echo '{"findings":[]}' >"$FAKE_PAGE1"
-run "no findings passes" 0 "Total active: 0." "Fixable CRITICAL or HIGH: 0"
+run "no findings passes" 0 "Total active: 0." "Fixable CRITICAL or HIGH in modern: 0"
 
 # unfixable CRITICAL and fixable MEDIUM do not fail the gate
 jq -n --argjson a "$(finding CRITICAL NO 'CVE-2025-0001 - libx')" --argjson b "$(finding MEDIUM YES 'CVE-2025-0002 - liby')" '{findings:[$a,$b]}' >"$FAKE_PAGE1"
-run "an unfixable CRITICAL and a fixable MEDIUM pass" 0 "Fixable CRITICAL or HIGH: 0" "| CRITICAL | NO | 1 |"
+run "an unfixable CRITICAL and a fixable MEDIUM pass" 0 "Fixable CRITICAL or HIGH in modern: 0" "| CRITICAL | NO | 1 |"
 
 # a fixable HIGH fails and is named
 jq -n --argjson a "$(finding HIGH YES 'CVE-2025-0003 - libz')" '{findings:[$a]}' >"$FAKE_PAGE1"
-run "a fixable HIGH fails the gate and is named" 1 "Fixable CRITICAL or HIGH: 1" "CVE-2025-0003 - libz"
+run "a fixable HIGH fails the gate and is named" 1 "Fixable CRITICAL or HIGH in modern: 1" "CVE-2025-0003 - libz"
 
 # a partial fix counts as fixable
 jq -n --argjson a "$(finding CRITICAL PARTIAL 'CVE-2025-0004 - libw')" '{findings:[$a]}' >"$FAKE_PAGE1"
-run "a PARTIAL fix counts as fixable" 1 "Fixable CRITICAL or HIGH: 1"
+run "a PARTIAL fix counts as fixable" 1 "Fixable CRITICAL or HIGH in modern: 1"
 
 # findings on the second page are counted
 jq -n --argjson a "$(finding LOW NO 'CVE-2025-0005 - liba')" '{findings:[$a],nextToken:"page2"}' >"$FAKE_PAGE1"
@@ -84,34 +84,45 @@ findings = [{"severity": "LOW", "fixAvailable": "NO", "title": f"CVE-2025-{i:04d
             for i in range(1500)]
 json.dump({"findings": findings}, open(sys.argv[1], "w"))
 PY
-run "handles a page too large for a command line" 0 "Total active: 1500." "Fixable CRITICAL or HIGH: 0"
+run "handles a page too large for a command line" 0 "Total active: 1500." "Fixable CRITICAL or HIGH in modern: 0"
 
 # an unreadable Security Hub is said, not shown as empty
 rm -f "$FAKE_HUB"
 run "an unreadable Security Hub is reported as unreadable, not as none" 0 "could not be read with this role"
 
-# findings are split into ShipTrack's own resources and the rest of the account, and the name of
-# someone else's repository is never printed
+# findings are split into modern, legacy, and the rest of the account; only modern is gated, and
+# the name of someone else's repository is never printed
 echo '{"Findings":[]}' >"$FAKE_HUB"
 jq -nc '{findings:[
   {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-1001 - gostd",
-   resources:[{type:"AWS_ECR_CONTAINER_IMAGE",details:{awsEcrContainerImage:{repositoryName:"shiptrack/app"}}}]},
+   resources:[{type:"AWS_ECR_CONTAINER_IMAGE",id:"img1",details:{awsEcrContainerImage:{repositoryName:"shiptrack/app"}}}]},
   {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-1002 - gostd",
-   resources:[{type:"AWS_ECR_CONTAINER_IMAGE",details:{awsEcrContainerImage:{repositoryName:"otherteam/payments"}}}]},
+   resources:[{type:"AWS_ECR_CONTAINER_IMAGE",id:"img2",details:{awsEcrContainerImage:{repositoryName:"otherteam/payments"}}}]},
   {severity:"CRITICAL",fixAvailable:"YES",title:"CVE-2025-1003 - openssl",
-   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0bbb",tags:{Project:"shiptrack"}}]},
-  {severity:"HIGH",fixAvailable:"NO",title:"CVE-2025-1004 - kernel",
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0bbb",tags:{Project:"shiptrack",Stack:"legacy"}}]},
+  {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-1004 - kernel",
    resources:[{type:"AWS_EC2_INSTANCE",id:"i-0aaa",tags:{Project:"someone-else"}}]}]}' >"$FAKE_PAGE1"
-run "splits ShipTrack's resources from the rest of the account" 1 \
-  "Fixable CRITICAL or HIGH: 3** (2 in ShipTrack's own resources)" \
-  "| shiptrack | AWS_ECR_CONTAINER_IMAGE | 1 | 1 | 1 |" "| other | AWS_ECR_CONTAINER_IMAGE | 1 | 1 | 1 |" \
-  "| shiptrack | AWS_EC2_INSTANCE | 1 | 1 | 1 |" "| other | AWS_EC2_INSTANCE | 1 | 0 | 1 |"
+run "splits modern, legacy, and the rest of the account" 1 \
+  "Fixable CRITICAL or HIGH in the account: 4." "Fixable CRITICAL or HIGH in modern: 1.**" \
+  "| modern | AWS_ECR_CONTAINER_IMAGE | 1 | 1 | 1 |" "| other | AWS_ECR_CONTAINER_IMAGE | 1 | 1 | 1 |" \
+  "| legacy | AWS_EC2_INSTANCE | 1 | 1 | 1 |" "| other | AWS_EC2_INSTANCE | 1 | 1 | 1 |" \
+  "CVE-2025-1001 - gostd"
 out=$("$script" 2>&1)
-if ! grep -qE 'otherteam|payments|someone-else' <<<"$out"; then echo "ok   another team's repository name is not printed"
-else echo "FAIL another team's repository name is not printed"; failures=$((failures + 1)); fi
+if ! grep -qE 'otherteam|payments|someone-else|CVE-2025-1002|CVE-2025-1003|CVE-2025-1004' <<<"$out"; then
+  echo "ok   another team's repository, and findings outside modern, are not named"
+else echo "FAIL another team's repository, and findings outside modern, are not named"; failures=$((failures + 1)); fi
 
-# an EKS node carries the cluster's tag rather than Project, and counts as ShipTrack's; two findings
-# on one node are one resource
+# legacy's and other teams' findings alone do not fail the gate
+jq -nc '{findings:[
+  {severity:"CRITICAL",fixAvailable:"YES",title:"CVE-2025-1005 - libc",
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0eee",tags:{Stack:"legacy"}}]},
+  {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-1006 - libc",
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0fff",tags:{}}]}]}' >"$FAKE_PAGE1"
+run "fixable findings on legacy and on other teams' resources do not fail the gate" 0 \
+  "Fixable CRITICAL or HIGH in the account: 2." "Fixable CRITICAL or HIGH in modern: 0.**"
+
+# an EKS node carries the cluster's tag, and counts as modern; two findings on one node are one
+# resource
 jq -nc '{findings:[
   {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-2001 - kubelet",
    resources:[{type:"AWS_EC2_INSTANCE",id:"i-0ccc",tags:{"eks:cluster-name":"shiptrack"}}]},
@@ -119,8 +130,9 @@ jq -nc '{findings:[
    resources:[{type:"AWS_EC2_INSTANCE",id:"i-0ccc",tags:{"eks:cluster-name":"shiptrack"}}]},
   {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-2003 - kubelet",
    resources:[{type:"AWS_EC2_INSTANCE",id:"i-0ddd",tags:{"eks:cluster-name":"another-cluster"}}]}]}' >"$FAKE_PAGE1"
-run "an EKS node of the shiptrack cluster is ShipTrack's" 1 \
-  "(2 in ShipTrack's own resources)" "| shiptrack | AWS_EC2_INSTANCE | 1 | 2 | 2 |" "| other | AWS_EC2_INSTANCE | 1 | 1 | 1 |"
+run "an EKS node of the shiptrack cluster is modern" 1 \
+  "Fixable CRITICAL or HIGH in modern: 2.**" "| modern | AWS_EC2_INSTANCE | 1 | 2 | 2 |" \
+  "| other | AWS_EC2_INSTANCE | 1 | 1 | 1 |" "CVE-2025-2001 - kubelet"
 
 # no identifiers anywhere in the output
 jq -n --argjson a "$(finding HIGH YES 'CVE-2025-0003 - libz')" '{findings:[$a]}' >"$FAKE_PAGE1"

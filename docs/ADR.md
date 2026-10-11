@@ -32,6 +32,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0026 | `modern-preview-listener` | Accepted |
 | 0027 | `validation-tooling-and-the-nightly-drift-check` | Accepted |
 | 0028 | `cutover-controls-as-workflows` | Accepted |
+| 0029 | `findings-gate-covers-modern-only` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -375,4 +376,17 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - `docs/runbooks/cutover.md` holds the wave procedures with the exact `tfvars` diff per step and one section per alarm, because every alarm description already links to `cutover.md#<alarm>`; `docs/runbooks/break-glass-rollback.md` holds the rollback.
 
 **Consequences:** A rollback is one workflow run and one approval, available to whoever can approve a deploy, and it works with no AWS CLI. It is a second path that changes the ALB outside Terraform, which is the point of break-glass, so the nightly drift check is what keeps it honest; the 24 hour reconcile rule is therefore a requirement and not a courtesy. The apply role can do this because it holds `PowerUserAccess`; the same call would be refused to the plan role. The gates script reads CloudWatch aggregates over one window: its p95 is the larger of the window's data points, which can be stricter than a single p95 across the whole window, and with little traffic it says `NO DATA`. Nothing here lifts the point of no return at wave 3 step 4.
+
+## ADR-0029: findings-gate-covers-modern-only
+
+**Status:** Accepted
+
+**Context:** ADR-0028's `security-findings.yml` failed the gate on every account-wide fixable CRITICAL or HIGH Inspector finding. Inspector is enabled for the whole account, and the first run counted 82 fixable findings on EC2 instances: some on ShipTrack's, some on instances this project does not own. The wave 0 exit criterion in modern's design is "0 fixable CRITICAL/HIGH in deployed images". A gate that another team's instance can fail says nothing about the cutover, and one that counts legacy's deliberately pinned AMI (AP-14) as a failure cannot pass until legacy is gone.
+
+**Decision:**
+- Each finding is placed in a scope from its resource: **modern** is an ECR repository named `shiptrack/...`, a node tagged `eks:cluster-name=shiptrack`, or a resource tagged `Stack=modern`; **legacy** is a resource tagged `Stack=legacy`; **other** is everything else in the account.
+- The gate fails on a fixable CRITICAL or HIGH finding in **modern** only. The legacy and other counts are printed, by resource type, so the baseline stays visible. A finding outside modern is never named in the log.
+- A finding is fixable when Inspector reports `fixAvailable` as `YES` or `PARTIAL`, as before.
+
+**Consequences:** The criterion measures what modern deploys, and nobody else's resources can block a wave. The scope comes from tags and a repository prefix, so a modern resource that carries none of them is counted as other and would not fail the gate: a new kind of resource needs its tag checked here. Legacy's findings are not gated, which is correct for a stack whose AMI is pinned on purpose, and they are the "before" number for the assessment.
 

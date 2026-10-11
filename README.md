@@ -53,7 +53,7 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `validation.yml` | by hand | Runs the contract suite (`smoke`, `full`, or `ui_parity`) or a k6 baseline against one stack through the ALB. Uploads nothing |
 | `validation-ci.yml` | pull requests touching `validation/` or `scripts/` | Lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests |
 | `cutover-gates.yml` | by hand | Judges gates G2 to G5 over a soak window from CloudWatch with the plan role and prints a table of numbers (ADR-0028) |
-| `security-findings.yml` | by hand | Inspector findings by severity and fix availability, and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH. The wave 0 exit criterion |
+| `security-findings.yml` | by hand | Inspector findings by severity and fix availability, and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). The wave 0 exit criterion |
 | `rollback-cutover.yml` | by hand, `dev` environment | Break-glass: all weighted routing back to legacy 100, modern 0, without a pull request. See `docs/runbooks/break-glass-rollback.md` |
 
 ## Opening both UIs side by side
