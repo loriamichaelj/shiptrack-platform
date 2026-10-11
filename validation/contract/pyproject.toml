@@ -17,6 +17,7 @@ markers = [
     "ui: checks of the served UI shell and its assets (included in smoke)",
     "ui_parity: both stacks must serve the same UI build; run only when both are deployed (cutover gate G6)",
     "pod: proof-of-delivery upload and read-back; needs one pinned stack",
+    "sla: waits for the SLA scan (up to 12 minutes); run by contract-sla and left out of contract-full",
 ]
 
 [tool.ruff]
