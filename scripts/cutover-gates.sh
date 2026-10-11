@@ -80,6 +80,7 @@ err_m=$(tg_metric "$modern_dim" HTTPCode_Target_5XX_Count Sum)
 p95_l=$(tg_metric "$legacy_dim" TargetResponseTime p95)
 p95_m=$(tg_metric "$modern_dim" TargetResponseTime p95)
 
+ms() { awk -v s="$1" 'BEGIN { printf "%.1f", s * 1000 }'; }
 ratio() { awk -v e="$1" -v r="$2" 'BEGIN { if (r > 0) printf "%.2f", 100 * e / r; else print "0.00" }'; }
 ratio_l=$(ratio "$err_l" "$req_l")
 ratio_m=$(ratio "$err_m" "$req_m")
@@ -109,9 +110,9 @@ fi
 if [[ "$enough" != yes ]]; then
   add "G3 Latency" "NO DATA" "modern p95 <= 1.2 x legacy p95" "requests: legacy $req_l, modern $req_m (need $min_requests each)"
 elif awk -v m="$p95_m" -v l="$p95_l" 'BEGIN { exit !(m <= 1.2 * l) }'; then
-  add "G3 Latency" "PASS" "modern p95 <= 1.2 x legacy p95" "legacy ${p95_l}s, modern ${p95_m}s"
+  add "G3 Latency" "PASS" "modern p95 <= 1.2 x legacy p95" "legacy $(ms "$p95_l") ms, modern $(ms "$p95_m") ms"
 else
-  add "G3 Latency" "FAIL" "modern p95 <= 1.2 x legacy p95" "legacy ${p95_l}s, modern ${p95_m}s"
+  add "G3 Latency" "FAIL" "modern p95 <= 1.2 x legacy p95" "legacy $(ms "$p95_l") ms, modern $(ms "$p95_m") ms"
 fi
 
 # G4: alarms in ALARM state. SEV1 or a pod restart alarm fails the gate.
@@ -121,12 +122,14 @@ sev1=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | sta
                | select(.AlarmName | test("pod-restarts") | not) | .AlarmName] | join(", ")' <<<"$alarms")
 restarts=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
                    | select(.AlarmName | test("pod-restarts")) | .AlarmName] | join(", ")' <<<"$alarms")
+sev2_names=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
+                    | select((.AlarmDescription // "") | test("SEV2")) | .AlarmName] | join(", ")' <<<"$alarms")
 sev2=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
                | select((.AlarmDescription // "") | test("SEV2")) | .AlarmName] | length' <<<"$alarms")
 if [[ -n "$sev1" || -n "$restarts" ]]; then
   add "G4 Stability" "FAIL" "no SEV1 alarm, no pod restarts from the release" "in ALARM: ${sev1:+$sev1}${sev1:+${restarts:+, }}${restarts}"
 else
-  add "G4 Stability" "PASS" "no SEV1 alarm, no pod restarts from the release" "no SEV1 in ALARM; $sev2 SEV2 in ALARM"
+  add "G4 Stability" "PASS" "no SEV1 alarm, no pod restarts from the release" "no SEV1 in ALARM; $sev2 SEV2 in ALARM${sev2_names:+ ($sev2_names)}"
 fi
 
 # G5 (wave 2 and later): the events queue and the dead-letter queues.
