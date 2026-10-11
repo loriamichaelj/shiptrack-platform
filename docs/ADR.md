@@ -30,6 +30,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0024 | `composite-alarms-need-an-unscoped-grant` | Accepted |
 | 0025 | `state-lock-recovery-workflow` | Accepted |
 | 0026 | `modern-preview-listener` | Accepted |
+| 0027 | `validation-tooling-and-the-nightly-drift-check` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -341,4 +342,21 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** An optional listener on `preview_port` (default 8080) forwards everything to `tg-modern`, outside the cutover weights. The ALB security group opens that port only to the CIDRs in `preview_ingress_cidrs`. The default is empty, which creates no listener and no rule, and `0.0.0.0/0` is refused by validation. The CIDRs come from the `PREVIEW_CIDRS` repository secret through `TF_VAR_preview_ingress_cidrs`. A secret and not a variable, because the logs and pull request comments of this public repository would otherwise show a person's address: Actions logs print each step's `env:` values and do not mask variables. The workflows also register each address with `::add-mask::`, and the security group rules are keyed by position, so a plan summary prints `preview["0"]` and not the address. The listener is plain HTTP, like the main one without a domain (risk R-01).
 
 **Consequences:** Legacy's routing is not touched, and deleting the secret removes the listener and the rule. Modern answers on a second port to anyone in the named CIDRs, with no token, and shares the legacy database, so what is done in its UI writes real rows. The WAF association, if enabled, covers the ALB and so this listener. The address is a person's current one, so it needs updating when it changes. With a custom domain and TLS this should move to a host-based rule on the TLS listener.
+
+## ADR-0027: validation-tooling-and-the-nightly-drift-check
+
+**Status:** Accepted
+
+**Context:** P6b and P7 add the contract suite, the k6 scenarios, and the workflows that run them and watch for drift. The simulator is already recorded in ADR-0023. Several details were left open, and by the time these landed other changes had added state the workflows have to agree with.
+
+**Decision:**
+- The contract suite is checked against the real legacy application, not only by reading the spec: it was run against a local instance and found the real behaviour (a malformed shipment id is a plain 404, an over-long idempotency key is a 422 validation error, event ingestion is asynchronous so the suite polls the track view). `SINGLE_STACK=1` lets the POD tests run when `BASE_URL` points straight at one stack and not at the ALB; without it they need `TARGET` set, as the design requires.
+- A test fails if any endpoint in the legacy §3.4 table has no test, so the suite cannot quietly fall behind the spec.
+- Modern's `deploy.yml` consumes the suite as `cd validation/contract && TARGET=modern uv run --frozen pytest -m smoke`, with `BASE_URL` and `TEST_TOKEN` from the environment, so the `smoke` marker, the lockfile, and those variable names are an interface and change only together.
+- `validation.yml` adds a fourth suite, `contract-ui-parity`, for cutover gate G6, and runs `contract-full` without the parity tests, which need both stacks. It uploads nothing: a failure message can contain the ALB address, which is masked in the log but not in a file.
+- `drift.yml` runs nightly on `dev` with the plan role (no environment, so the `ref:refs/heads/dev` trust applies). `terraform-ci.sh drift` exits 0, 2, or 1; exit 2 opens or updates one issue, "Drift detected: platform/dev", with addresses and actions only, and a clean plan closes it. Exit 1 fails the job. It passes `TF_VAR_preview_ingress_cidrs` from the same secret as the apply and registers the addresses as masked values, as ADR-0026 requires of every workflow that plans `terraform/envs/dev`; without it the preview listener would look like drift to destroy every night.
+- `validation-ci.yml` runs on pull requests that touch `validation/` or `scripts/`: lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests for `terraform-ci.sh` (the drift exit codes and the masking of identifiers, against fake `aws` and `terraform` programs) and for `force-unlock.sh`.
+- The k6 summary JSON holds metrics only, with no URLs or headers; routes are tagged by name, not by address.
+
+**Consequences:** The UI checks cannot be run against the bare application process, because nginx serves `/ui/` in legacy; they run against a deployed stack. The k6 baseline against the bare application shows its UI iterations as failures for the same reason. Any new workflow that plans `terraform/envs/dev` has to pass the preview secret too.
 

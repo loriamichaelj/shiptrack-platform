@@ -1,0 +1,100 @@
+name: validation
+
+# Runs the shared definition of "correct" against the live ALB: the contract suite or a k6 baseline,
+# against one stack. It runs on `dev` with the platform plan role (whose trust includes
+# ref:refs/heads/dev) to read the base URL and the test-routing token. Nothing from the run is
+# uploaded: failure messages can contain the ALB address, which is masked in the log but not in files.
+#
+# The legacy and modern repositories consume validation/ by checking this repository out at a pinned
+# commit SHA. This workflow is for running it by hand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "What to run"
+        required: true
+        type: choice
+        options:
+          - contract-smoke
+          - contract-full
+          - contract-ui-parity
+          - k6-baseline
+      target:
+        description: "The stack to address (ignored by contract-ui-parity, which uses both)"
+        required: true
+        type: choice
+        default: legacy
+        options:
+          - legacy
+          - modern
+          - none
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.22"
+  K6_VERSION: "2.3.0"
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Read the base URL and the test token
+        run: |
+          base_url=$(aws ssm get-parameter --name /shiptrack/platform/base_url --query Parameter.Value --output text)
+          echo "::add-mask::$base_url"
+          secret_arn=$(aws ssm get-parameter --name /shiptrack/platform/test_token_secret_arn --query Parameter.Value --output text)
+          token=$(aws secretsmanager get-secret-value --secret-id "$secret_arn" --query SecretString --output text)
+          echo "::add-mask::$token"
+          {
+            echo "BASE_URL=$base_url"
+            echo "TEST_TOKEN=$token"
+          } >>"$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        if: startsWith(inputs.suite, 'contract-')
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: Contract suite
+        if: startsWith(inputs.suite, 'contract-')
+        working-directory: validation/contract
+        env:
+          TARGET: ${{ inputs.target }}
+          SUITE: ${{ inputs.suite }}
+        run: |
+          case "$SUITE" in
+            contract-smoke) marker="smoke" ;;
+            contract-full) marker="not ui_parity" ;;
+            contract-ui-parity) marker="ui_parity" ;;
+            *) echo "unknown suite: $SUITE" >&2; exit 1 ;;
+          esac
+          uv sync --frozen
+          uv run --frozen pytest -m "$marker"
+      - uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1.2.1
+        if: inputs.suite == 'k6-baseline'
+        with:
+          k6-version: ${{ env.K6_VERSION }}
+      - name: k6 baseline
+        if: inputs.suite == 'k6-baseline'
+        env:
+          TARGET: ${{ inputs.target }}
+        working-directory: validation/loadtest
+        run: k6 run baseline.js
