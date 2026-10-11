@@ -99,16 +99,28 @@ jq -nc '{findings:[
   {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-1002 - gostd",
    resources:[{type:"AWS_ECR_CONTAINER_IMAGE",details:{awsEcrContainerImage:{repositoryName:"otherteam/payments"}}}]},
   {severity:"CRITICAL",fixAvailable:"YES",title:"CVE-2025-1003 - openssl",
-   resources:[{type:"AWS_EC2_INSTANCE",tags:{Project:"shiptrack"}}]},
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0bbb",tags:{Project:"shiptrack"}}]},
   {severity:"HIGH",fixAvailable:"NO",title:"CVE-2025-1004 - kernel",
-   resources:[{type:"AWS_EC2_INSTANCE",tags:{Project:"someone-else"}}]}]}' >"$FAKE_PAGE1"
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0aaa",tags:{Project:"someone-else"}}]}]}' >"$FAKE_PAGE1"
 run "splits ShipTrack's resources from the rest of the account" 1 \
   "Fixable CRITICAL or HIGH: 3** (2 in ShipTrack's own resources)" \
-  "| shiptrack | AWS_ECR_CONTAINER_IMAGE | 1 | 1 |" "| other | AWS_ECR_CONTAINER_IMAGE | 1 | 1 |" \
-  "| shiptrack | AWS_EC2_INSTANCE | 1 | 1 |" "| other | AWS_EC2_INSTANCE | 0 | 1 |"
+  "| shiptrack | AWS_ECR_CONTAINER_IMAGE | 1 | 1 | 1 |" "| other | AWS_ECR_CONTAINER_IMAGE | 1 | 1 | 1 |" \
+  "| shiptrack | AWS_EC2_INSTANCE | 1 | 1 | 1 |" "| other | AWS_EC2_INSTANCE | 1 | 0 | 1 |"
 out=$("$script" 2>&1)
 if ! grep -qE 'otherteam|payments|someone-else' <<<"$out"; then echo "ok   another team's repository name is not printed"
 else echo "FAIL another team's repository name is not printed"; failures=$((failures + 1)); fi
+
+# an EKS node carries the cluster's tag rather than Project, and counts as ShipTrack's; two findings
+# on one node are one resource
+jq -nc '{findings:[
+  {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-2001 - kubelet",
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0ccc",tags:{"eks:cluster-name":"shiptrack"}}]},
+  {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-2002 - containerd",
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0ccc",tags:{"eks:cluster-name":"shiptrack"}}]},
+  {severity:"HIGH",fixAvailable:"YES",title:"CVE-2025-2003 - kubelet",
+   resources:[{type:"AWS_EC2_INSTANCE",id:"i-0ddd",tags:{"eks:cluster-name":"another-cluster"}}]}]}' >"$FAKE_PAGE1"
+run "an EKS node of the shiptrack cluster is ShipTrack's" 1 \
+  "(2 in ShipTrack's own resources)" "| shiptrack | AWS_EC2_INSTANCE | 1 | 2 | 2 |" "| other | AWS_EC2_INSTANCE | 1 | 1 | 1 |"
 
 # no identifiers anywhere in the output
 jq -n --argjson a "$(finding HIGH YES 'CVE-2025-0003 - libz')" '{findings:[$a]}' >"$FAKE_PAGE1"
