@@ -188,6 +188,12 @@ run "the_preview_port_opens_only_to_named_cidrs" {
     error_message = "One TCP rule per named CIDR, on the preview port only."
   }
 
+  # The rule addresses are printed into public pull request comments, so they carry no address.
+  assert {
+    condition     = alltrue([for k in keys(aws_vpc_security_group_ingress_rule.preview) : can(regex("^[0-9]+$", k))])
+    error_message = "The preview rules are keyed by position, not by CIDR."
+  }
+
   # The public ports are untouched.
   assert {
     condition     = length(aws_vpc_security_group_ingress_rule.alb) == 1

@@ -45,6 +45,17 @@ jobs:
           role-to-assume: ${{ secrets.AWS_APPLY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           mask-aws-account-id: true
+      # Register the preview addresses as masked values before any step can print them: a secret is
+      # masked as a whole, but one address on its own is not.
+      - name: Mask the preview addresses
+        env:
+          PREVIEW_CIDRS: ${{ secrets.PREVIEW_CIDRS }}
+        run: |
+          jq -r '.[]?' <<<"${PREVIEW_CIDRS:-[]}" | while read -r cidr; do
+            [[ -n "$cidr" ]] || continue
+            echo "::add-mask::$cidr"
+            echo "::add-mask::${cidr%/*}"
+          done
       - name: Apply
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
@@ -53,7 +64,7 @@ jobs:
           TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
           TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
           TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
-          # A JSON list of CIDRs, set as a repository variable so a person's address is not committed.
-          # Unset, there is no preview listener.
-          TF_VAR_preview_ingress_cidrs: ${{ vars.PREVIEW_CIDRS || '[]' }}
+          # A JSON list of CIDRs, kept as a secret so a person's address is neither committed nor
+          # printed in a public log. Unset, there is no preview listener.
+          TF_VAR_preview_ingress_cidrs: ${{ secrets.PREVIEW_CIDRS || '[]' }}
         run: scripts/terraform-ci.sh apply

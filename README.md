@@ -52,16 +52,17 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 
 The ALB's address serves legacy: the weighted rules send all traffic to it until the cutover moves
 weights. To open the modern UI beside it without the test-routing headers, set the `PREVIEW_CIDRS`
-repository variable to a JSON list of the addresses that may reach it, for example
+repository **secret** to a JSON list of the addresses that may reach it, for example
 `["203.0.113.7/32"]`, and run `terraform-apply`. That adds a listener on port 8080 that forwards
 everything to modern. Then:
 
 - legacy: `http://<ALB address>/ui/`
 - modern: `http://<ALB address>:8080/ui/`
 
-The variable is not committed, because it names a person's address. Left unset, nothing is created,
-and `0.0.0.0/0` is refused. The listener is outside the cutover weights (ADR-0026). Unset the
-variable and apply to remove it.
+It is a secret, not a variable, because it names a person's address and the logs and pull request
+comments of this repository are public: a secret is masked in logs, and the plan prints the rules
+by position, not by address. Left unset, nothing is created, and `0.0.0.0/0` is refused. The
+listener is outside the cutover weights (ADR-0026). Delete the secret and apply to remove it.
 
 ## Status
 

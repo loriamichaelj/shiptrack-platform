@@ -60,7 +60,7 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "preview_ingress_cidrs" {
-  description = "CIDRs allowed to open the modern preview listener, a second address that goes straight to modern. Empty creates no listener. Set the PREVIEW_CIDRS repository variable, a JSON list such as [\"203.0.113.7/32\"]; it is not committed, because it names a person's address."
+  description = "CIDRs allowed to open the modern preview listener, a second address that goes straight to modern. Empty creates no listener. Set the PREVIEW_CIDRS repository secret, a JSON list such as [\"203.0.113.7/32\"]. It is a secret, not a variable, so that it is not committed and the workflow logs mask it: it names a person's address and the logs of this repository are public."
   type        = list(string)
   default     = []
 }

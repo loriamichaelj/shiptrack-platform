@@ -131,6 +131,17 @@ jobs:
           role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           mask-aws-account-id: true
+      # Mask the preview addresses before any step can print them (see terraform-apply.yml).
+      - name: Mask the preview addresses
+        if: steps.env.outputs.present == 'true'
+        env:
+          PREVIEW_CIDRS: ${{ secrets.PREVIEW_CIDRS }}
+        run: |
+          jq -r '.[]?' <<<"${PREVIEW_CIDRS:-[]}" | while read -r cidr; do
+            [[ -n "$cidr" ]] || continue
+            echo "::add-mask::$cidr"
+            echo "::add-mask::${cidr%/*}"
+          done
       - name: Plan
         if: steps.env.outputs.present == 'true'
         env:
@@ -141,7 +152,7 @@ jobs:
           TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
           TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
           # Must match terraform-apply.yml, or the plan shows the preview listener as a change.
-          TF_VAR_preview_ingress_cidrs: ${{ vars.PREVIEW_CIDRS || '[]' }}
+          TF_VAR_preview_ingress_cidrs: ${{ secrets.PREVIEW_CIDRS || '[]' }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan
       - name: Comment the plan summary
