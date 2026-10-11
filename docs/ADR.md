@@ -28,6 +28,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0022 | `adopt-the-accounts-existing-security-services` | Accepted |
 | 0023 | `carrier-event-simulator` | Accepted |
 | 0024 | `composite-alarms-need-an-unscoped-grant` | Accepted |
+| 0025 | `state-lock-recovery-workflow` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -319,4 +320,14 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** `cloudwatch:PutCompositeAlarm` moves out of the `AlarmsAndDashboards` statement into its own `CompositeAlarms` statement in `bootstrap/policies/modern.tf`, with `Resource: *` and an `aws:RequestedRegion` condition. Everything else in the statement stays scoped to `shiptrack-modern-*`. Only the modern apply role gets it; legacy and platform create no composite alarms.
 
 **Consequences:** The modern pipeline can create a composite alarm of any name in the region. A composite alarm only reads the state of other alarms and notifies the actions it names, so the exposure is a misleading alarm, not access to data or resources. The change reaches the role through `bootstrap-apply.yml`, run by hand in the `bootstrap` environment. If CloudWatch ever accepts a scoped grant, the statement can fold back into `AlarmsAndDashboards`.
+
+## ADR-0025: state-lock-recovery-workflow
+
+**Status:** Accepted
+
+**Context:** A platform `terraform-apply` run cancelled by hand left its state lock behind. The lock outlived the run by more than a day, and every pull request plan and every later apply failed on it. Clearing it needs write access to the state bucket, which only a pipeline role has, since nothing is applied from a workstation.
+
+**Decision:** `.github/workflows/unlock-state.yml` runs `scripts/force-unlock.sh` by hand in the `dev` environment, so a reviewer approves each run, with the apply role. It takes the lock ID from the failing run's message. The script reads the lock object in the state bucket and refuses unless the ID matches exactly and the lock is older than 30 minutes. It shares `terraform-apply`'s concurrency group, so it waits for a running apply instead of racing it.
+
+**Consequences:** A stale lock is cleared by a reviewed pipeline run instead of someone's own credentials. A lock younger than 30 minutes cannot be removed this way, which is the case where removing it could corrupt a run that is still writing state. The workflow covers `terraform/envs/dev` only; the bootstrap and legacy and modern states are separate and would need their own.
 
