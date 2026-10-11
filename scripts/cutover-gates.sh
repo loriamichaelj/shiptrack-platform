@@ -4,7 +4,7 @@
 # nobody needs the console or the AWS CLI to judge a soak.
 # Usage: scripts/cutover-gates.sh
 #
-# G1 (the contract suite) and G6 (UI parity) are run by check-live-stack.yml. The table says so.
+# G1 (the contract suite) is run by check-live-stack.yml. The table says so.
 #
 #   G2  tg-modern 5xx ratio <= tg-legacy 5xx ratio + 0.5 percentage points
 #   G3  tg-modern p95 response time <= 1.2 x tg-legacy p95
@@ -95,7 +95,6 @@ add() { # add <gate> <verdict> <criterion> <measured>
 }
 
 add "G1 Correctness" "run check-live-stack.yml" "contract suite passes with TARGET=modern" "not measured here"
-add "G6 UI parity" "run check-live-stack.yml" "ui_parity passes (before wave 1)" "not measured here"
 
 # G2
 if [[ "$enough" != yes ]]; then

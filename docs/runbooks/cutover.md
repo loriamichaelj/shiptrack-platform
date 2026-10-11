@@ -26,7 +26,7 @@ legacy after it (`preview_stack`). Neither changes with the weights. Changing th
 
 | Tool | What it does | Where it runs |
 |---|---|---|
-| `check-live-stack.yml` | The contract suite (`contract-smoke`, `contract-full`, `contract-ui-parity`) or a k6 baseline against one stack | Actions, plan role, no approval |
+| `check-live-stack.yml` | The contract suite (`contract-smoke`, `contract-full`, `contract-sla`) or a k6 baseline against one stack | Actions, plan role, no approval |
 | `check-cutover-gates.yml` | Judges G2 to G5 over an evidence window and prints a table of numbers | Actions, plan role, no approval |
 | `check-security-findings.yml` | Inspector findings by scope (modern, legacy, other) and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern | Actions, plan role, no approval |
 | `apply-terraform.yml` | Applies a weight change after a reviewer approves the `dev` gate | Actions, apply role |
