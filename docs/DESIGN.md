@@ -348,6 +348,7 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
 **Listeners**
 - If `var.domain_name` is set: an ACM certificate (DNS-validated in the existing Route 53 hosted zone, looked up by data source), an HTTPS:443 listener with TLS policy `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` (the current console default: TLS 1.3/1.2 with hybrid post-quantum key exchange), and HTTP:80 → 301 redirect to HTTPS.
 - Otherwise: HTTP:80 only (risk R-01). All rules below attach to whichever listener serves traffic.
+- Optional preview listener (ADR-0026): when `preview_ingress_cidrs` is non-empty, HTTP on `preview_port` (default 8080) forwards everything to `tg-modern`, outside the cutover weights, and the ALB security group opens that port only to those CIDRs. The CIDRs come from a repository secret, never a committed value, and `0.0.0.0/0` is refused.
 
 **Target groups**
 
@@ -546,6 +547,8 @@ These tools own the **shared definition of correct** for both stacks.
   `bootstrap/` gets the same lint and scan steps but is never planned here; it is planned and applied only by `bootstrap-apply.yml` (§6.1).
 - **`terraform-apply.yml`** (push to `dev`): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
 - **`drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
+- **`unlock-state.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Removes a stale state lock given its ID, and refuses a lock with another ID or one younger than 30 minutes (ADR-0025).
+- Every workflow that plans or applies `terraform/envs/dev` passes the preview CIDR secret and registers each address with `add-mask` before any step can print it (ADR-0026).
 - All workflows: `permissions: { id-token: write, contents: read, pull-requests: write }` (minimum per job). No long-lived AWS keys exist anywhere.
 
 ### 6.12 Public repository rules

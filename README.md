@@ -101,3 +101,29 @@ actionlint
 `bootstrap/tests/moto.sh` runs the real bootstrap script against a moto server. `db/tests/bootstrap.sh`
 runs `bootstrap.sql` twice against a throwaway PostgreSQL 17 container (it needs Docker) and checks
 that the second run changes nothing.
+
+The wrapper scripts and the validation tooling are checked without AWS too:
+
+```sh
+scripts/tests/test_terraform_ci.sh && scripts/tests/test_force_unlock.sh   # against fake aws and terraform
+shellcheck scripts/*.sh scripts/tests/*.sh
+( cd validation/contract && uv sync --frozen && uv run --frozen pytest --collect-only -q \
+    && uv run --frozen pytest tests/test_endpoint_coverage.py -q )         # needs no BASE_URL
+( cd validation/simulator && uv sync --frozen && uv run --frozen ruff check . && uv run --frozen pytest -q )
+```
+
+## Running the validation suites
+
+`validation.yml` is dispatched by hand, from `dev`, with the plan role. It reads the base URL and the
+test-routing token itself and uploads nothing, because a failure message can contain the ALB address.
+
+| Suite | Marker or script | Notes |
+|---|---|---|
+| `contract-smoke` | `-m smoke` | The 8-test subset that modern's `deploy.yml` runs after every deploy |
+| `contract-full` | `-m "not ui_parity"` | Everything that needs one stack |
+| `contract-ui-parity` | `-m ui_parity` | Gate G6; both stacks must be deployed |
+| `k6-baseline` | `loadtest/baseline.js` | 20 rps for 30 minutes against one stack; the summary stays on the runner |
+
+`target` is `legacy`, `modern`, or `none`. The POD tests need a stack pinned with `legacy` or
+`modern`, because an upload and its read-back must reach the same stack. The suites change nothing
+about routing: they address a stack with the test-routing headers, so the weights can stay as they are.
