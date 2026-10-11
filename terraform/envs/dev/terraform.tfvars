@@ -27,7 +27,7 @@ enable_waf            = false
 # Changing these weights IS the cutover; each change is a pull request.
 cutover = {
   track   = { legacy = 0, modern = 100 }
-  default = { legacy = 100, modern = 0 }
+  default = { legacy = 90, modern = 10 }
 }
 
 enable_pod_data_events   = false
