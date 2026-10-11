@@ -4,8 +4,14 @@
 # read-only plan role.
 # Usage: scripts/security-findings.sh
 #
-# This is the wave 0 exit criterion "Inspector shows no fixable CRITICAL or HIGH": it exits 1 when
-# there is one. Security Hub is reported, not gated.
+# This is the wave 0 exit criterion "Inspector shows no fixable CRITICAL or HIGH in deployed images":
+# it exits 1 when modern's own resources have one (ADR-0029). Each finding is placed in a scope:
+#   modern  an ECR repository named shiptrack/..., a node of the shiptrack EKS cluster, or a
+#           resource tagged Stack=modern
+#   legacy  a resource tagged Stack=legacy: the pinned AMI is a deliberate anti-pattern (AP-14), so
+#           its findings are the "before" baseline, reported and not gated
+#   other   everything else in the account, which this project does not own
+# Security Hub is reported, not gated.
 #
 # The output has counts, severities, resource types, and public finding titles such as CVE ids and
 # control names. It has no resource ARN, instance or image identifier, account ID, or address,
@@ -35,9 +41,11 @@ while :; do
   jq -c '[(.findings // [])[] | (.resources[0] // {}) as $r
           | {severity, fixAvailable, title, resources: [{type: $r.type}], rid: $r.id,
              scope: (if (($r.details.awsEcrContainerImage.repositoryName // "") | startswith("shiptrack/"))
-                        or (($r.tags.Project // "") == "shiptrack")
                         or (($r.tags["eks:cluster-name"] // "") == "shiptrack")
-                     then "shiptrack" else "other" end),
+                        or (($r.tags.Stack // "") == "modern")
+                     then "modern"
+                     elif ($r.tags.Stack // "") == "legacy" then "legacy"
+                     else "other" end),
              repo: (if (($r.details.awsEcrContainerImage.repositoryName // "") | startswith("shiptrack/"))
                     then $r.details.awsEcrContainerImage.repositoryName else null end)}]' \
     "$work/page.json" >"$work/slim.json"
@@ -49,11 +57,11 @@ done
 findings=$(cat "$work/all.json")
 
 total=$(jq 'length' <<<"$findings")
-fixable_shiptrack=$(jq '[.[] | select(.scope == "shiptrack")
-                            | select(.severity == "CRITICAL" or .severity == "HIGH")
-                            | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length' <<<"$findings")
 fixable=$(jq '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
                    | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length' <<<"$findings")
+fixable_modern=$(jq '[.[] | select(.scope == "modern")
+                         | select(.severity == "CRITICAL" or .severity == "HIGH")
+                         | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length' <<<"$findings")
 
 {
   echo "### Inspector: active findings"
@@ -69,23 +77,24 @@ fixable=$(jq '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
   echo "|---|---|"
   jq -r 'group_by(.resources[0].type) | map("| \(.[0].resources[0].type // "unknown") | \(length) |") | .[]' <<<"$findings"
   echo
-  echo "By scope (ShipTrack is an ECR repository named shiptrack/..., a resource tagged Project=shiptrack,"
-  echo "or a node of the shiptrack EKS cluster;"
-  echo "anything else in the account is \"other\"):"
+  echo "By scope (modern: a shiptrack/ ECR repository, a node of the shiptrack EKS cluster, or Stack=modern;"
+  echo "legacy: Stack=legacy, a deliberate baseline; other: not this project's). Only modern is gated:"
   echo
   echo "| Scope | Resource type | Distinct resources | Fixable CRITICAL or HIGH | All active |"
   echo "|---|---|---|---|---|"
   jq -r 'group_by([.scope, .resources[0].type])
          | map("| \(.[0].scope) | \(.[0].resources[0].type // "unknown") | \([.[].rid] | unique | length) | \([.[] | select(.severity == "CRITICAL" or .severity == "HIGH") | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length) | \(length) |") | .[]' <<<"$findings"
   echo
-  echo "Total active: $total. **Fixable CRITICAL or HIGH: $fixable** ($fixable_shiptrack in ShipTrack's own resources)."
-  if [[ "$fixable" -gt 0 ]]; then
+  echo "Total active: $total. Fixable CRITICAL or HIGH in the account: $fixable."
+  echo "**Fixable CRITICAL or HIGH in modern: $fixable_modern.**"
+  if [[ "$fixable_modern" -gt 0 ]]; then
     echo
-    echo "Fixable CRITICAL and HIGH, by title:"
+    echo "Fixable CRITICAL and HIGH in modern, by title:"
     echo
-    echo "| Severity | Title | Resources |"
+    echo "| Severity | Title | Findings |"
     echo "|---|---|---|"
-    jq -r '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
+    jq -r '[.[] | select(.scope == "modern")
+                | select(.severity == "CRITICAL" or .severity == "HIGH")
                 | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")]
            | group_by(.title) | map("| \(.[0].severity) | \(.[0].title) | \(length) |") | .[]' <<<"$findings"
   fi
@@ -111,7 +120,7 @@ hub=$(aws securityhub get-findings --max-items 500 --output json --filters "$fil
   fi
 } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
-if [[ "$fixable" -gt 0 ]]; then
-  echo "::error::$fixable fixable CRITICAL or HIGH Inspector finding(s)"
+if [[ "$fixable_modern" -gt 0 ]]; then
+  echo "::error::$fixable_modern fixable CRITICAL or HIGH Inspector finding(s) in modern's resources"
   exit 1
 fi

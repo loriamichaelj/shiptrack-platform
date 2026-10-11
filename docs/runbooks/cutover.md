@@ -28,7 +28,7 @@ weights. Changing the weights **is** the cutover, so each change is a pull reque
 |---|---|---|
 | `validation.yml` | The contract suite (`contract-smoke`, `contract-full`, `contract-ui-parity`) or a k6 baseline against one stack | Actions, plan role, no approval |
 | `cutover-gates.yml` | Judges G2 to G5 over the soak window and prints a table of numbers | Actions, plan role, no approval |
-| `security-findings.yml` | Inspector findings by severity and fix availability, and Security Hub CRITICAL and HIGH | Actions, plan role, no approval |
+| `security-findings.yml` | Inspector findings by scope (modern, legacy, other) and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern | Actions, plan role, no approval |
 | `terraform-apply.yml` | Applies a weight change after a reviewer approves the `dev` gate | Actions, apply role |
 | `rollback-cutover.yml` | Break-glass: all traffic back to legacy now (`break-glass-rollback.md`) | Actions, apply role, `dev` gate |
 
@@ -73,14 +73,14 @@ Entry: platform applied; modern cluster, add-ons, and release deployed.
 1. `validation.yml`: `contract-full` with target `modern`, then `contract-ui-parity` (G6).
 2. `validation.yml`: `k6-baseline` with target `legacy`, then with target `modern`. The two summaries
    are the G2 and G3 baseline.
-3. `security-findings.yml`: no fixable CRITICAL or HIGH. The table splits findings into ShipTrack's
-   own resources (an ECR repository named `shiptrack/...`, a resource tagged `Project=shiptrack`, or a
-   node of the `shiptrack` EKS cluster) and the rest of the account, so a finding in another team's image is visible but is not mistaken
-   for ShipTrack's.
+3. `security-findings.yml`: no fixable CRITICAL or HIGH in modern, which is the `shiptrack/` ECR
+   repository, the nodes of the `shiptrack` EKS cluster, and anything tagged `Stack=modern`. Legacy's
+   findings are printed as the baseline and are not gated (its AMI is pinned on purpose, AP-14), and
+   so are other teams' resources (ADR-0029).
 4. Confirm the alarms are in `OK` and the `shiptrack-cutover` dashboard shows both target groups.
 
 Exit: contract green, k6 thresholds met (`http_req_failed < 1%`, `p(95) < 500 ms`), G6 passed, no
-fixable CRITICAL or HIGH, and the evidence stored in `docs/migration/wave-0/`. Rollback: none needed.
+fixable CRITICAL or HIGH in modern, and the evidence stored in `docs/migration/wave-0/`. Rollback: none needed.
 
 ### Wave 1: read path and UI
 
