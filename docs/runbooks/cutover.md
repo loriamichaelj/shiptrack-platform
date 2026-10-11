@@ -27,7 +27,7 @@ weights. Changing the weights **is** the cutover, so each change is a pull reque
 | Tool | What it does | Where it runs |
 |---|---|---|
 | `validation.yml` | The contract suite (`contract-smoke`, `contract-full`, `contract-ui-parity`) or a k6 baseline against one stack | Actions, plan role, no approval |
-| `cutover-gates.yml` | Judges G2 to G5 over the soak window and prints a table of numbers | Actions, plan role, no approval |
+| `cutover-gates.yml` | Judges G2 to G5 over an evidence window and prints a table of numbers | Actions, plan role, no approval |
 | `security-findings.yml` | Inspector findings by scope (modern, legacy, other) and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern | Actions, plan role, no approval |
 | `terraform-apply.yml` | Applies a weight change after a reviewer approves the `dev` gate | Actions, apply role |
 | `rollback-cutover.yml` | Break-glass: all traffic back to legacy now (`break-glass-rollback.md`) | Actions, apply role, `dev` gate |
@@ -43,9 +43,9 @@ weights. Changing the weights **is** the cutover, so each change is a pull reque
 | G5 Async health (wave 2 on) | Events queue age under 60 s, dead-letter queues empty | `cutover-gates.yml` with wave 2 |
 | G6 UI build parity (before wave 1) | Both stacks serve identical hashed UI asset names | `validation.yml` `contract-ui-parity` |
 
-Soak: 30 minutes per weight step. A gate with too little traffic says `NO DATA`, which is not a pass:
-run `validation.yml` with `k6-baseline` and target `none` during the soak, so the weighted rules see
-load.
+Evidence window: a step is judged once each target group has seen at least `MIN_REQUESTS` requests
+(default 100). A gate with too little traffic says `NO DATA`, which is not a pass: run
+`validation.yml` with `k6-baseline` and target `none` first, so the weighted rules see load.
 
 ## One weight step
 
@@ -57,8 +57,8 @@ load.
    It takes under a minute.
 3. **Load.** Dispatch `validation.yml`: suite `k6-baseline`, target `none`. Then `contract-smoke`
    against `modern` once.
-4. **Soak.** Wait the full 30 minutes. Watch for SEV1 notifications.
-5. **Judge.** Dispatch `cutover-gates.yml` with `window_minutes` 30 and the wave. Every row must be
+4. **Watch.** Let the load run, and watch for SEV1 notifications while it does.
+5. **Judge.** Dispatch `cutover-gates.yml` with a `window_minutes` that covers the load, and the wave. Every row must be
    PASS (or `run validation.yml` for G1 and G6, `n/a` for G5 before wave 2). `NO DATA` is a stop.
 6. **Record.** Fill in the go/no-go record below and store it with the evidence in modern's
    `docs/migration/wave-N/`, scrubbed of addresses and identifiers.
@@ -117,7 +117,7 @@ queue drains. S3 PODs stay readable by legacy v1.1.0.
 
 ### Handoff: schema ownership
 
-Entry: wave 2 at 100% for 24 hours. Set legacy's `RUN_MIGRATIONS` repository variable to `false`,
+Entry: wave 2 at 100% with G1 to G5 passing. Set legacy's `RUN_MIGRATIONS` repository variable to `false`,
 then deploy modern with `migrations.enabled=true`; the migration job at head is a no-op. Rollback:
 revert both flags. Details: modern design §9.1.
 
@@ -132,13 +132,13 @@ Entry: handoff complete. In order, as in modern design §9.2:
    back to legacy: after it, forward-fix only.** Before it, re-enable legacy's cron and suspend the
    CronJob.
 5. Legacy Auto Scaling group to 0 (a legacy pull request).
-6. After 7 days: destroy the legacy stack and remove the `tg-legacy` routing (a platform pull request).
+6. Once steps 3 and 4 are verified: destroy the legacy stack and remove the `tg-legacy` routing (a platform pull request).
 
 ## Roll back
 
 | Situation | Do |
 |---|---|
-| A gate fails or an alarm fires during a soak, and there is time | Pull request restoring the previous weights; merge; approve the apply |
+| A gate fails or an alarm fires while a step is being judged, and there is time | Pull request restoring the previous weights; merge; approve the apply |
 | User impact now | `rollback-cutover.yml` (all weighted routing to legacy 100), then the pull request within 24 hours |
 | After wave 3 step 4 | Forward-fix only. Do not route back to legacy |
 
@@ -150,7 +150,7 @@ step: roll back first, investigate second.
 ### tg-legacy-5xx-ratio
 
 SEV1. More than 2% of requests to legacy's target group returned 5xx. Legacy errors are not a
-cutover failure by themselves, but they move the G2 baseline, so a soak run while this is firing
+cutover failure by themselves, but they move the G2 baseline, so a step judged while this is firing
 proves nothing. Check the latest legacy deploy (`deploy.yml` in `shiptrack-legacy`) and the legacy
 hosts' health before continuing any step.
 
@@ -168,7 +168,7 @@ alarms below, since both stacks share one RDS instance.
 ### tg-modern-p99-latency
 
 SEV2. Modern's p99 is above 1 second. During a wave this points at G3. Check the database alarms,
-then modern's pod count and restarts. If it persists across a soak, roll back.
+then modern's pod count and restarts. If it persists while a step is judged, roll back.
 
 ### tg-legacy-unhealthy-hosts
 
@@ -217,10 +217,10 @@ Copy into `docs/migration/wave-N/` in `shiptrack-modern` for each step, scrubbed
 - Decision: go | hold | roll back
 - Approved by: <person>
 - Pull request: <link>
-- Soak window: <start> to <end> (30 minutes)
-- Load during the soak: k6-baseline, target none, run <link>
+- Evidence window: <start> to <end>, with the request count of each target group
+- Load during the window: k6-baseline, target none, run <link>
 - Gates (cutover-gates run <link>): G2 <result>, G3 <result>, G4 <result>, G5 <result or n/a>
 - G1 (validation.yml run <link>) and G6: <result>
-- Alarms fired during the soak: <none | names>
+- Alarms fired during the window: <none | names>
 - Notes: <anything a later reader needs>
 ```
