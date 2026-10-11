@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Plan or apply the bootstrap configuration. Run by .github/workflows/bootstrap-apply.yml.
+# Plan or apply the bootstrap configuration. Run by .github/workflows/apply-bootstrap.yml.
 # Usage: bootstrap/scripts/ci.sh plan|apply
 #
 # State lives in the bucket this configuration creates, so the first run is special:

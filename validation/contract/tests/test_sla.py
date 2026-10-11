@@ -3,7 +3,7 @@
 The scan runs every five minutes, so this waits for it: it is a marker of its own (`sla`) and is
 left out of `contract-full`. It cannot count alerts, which are in the private database; it shows that
 the scan flags every overdue shipment it is given and that the flag does not change afterwards. The
-alert count is read with `evidence.yml sla-duplicates` before and after: it grows by the number of
+alert count is read with `check-evidence.yml sla-duplicates` before and after: it grows by the number of
 shipments created here and `extra_alerts` stays 0.
 """
 

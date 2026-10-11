@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove a stale Terraform state lock on terraform/envs/dev. Run by .github/workflows/unlock-state.yml.
+# Remove a stale Terraform state lock on terraform/envs/dev. Run by .github/workflows/ops-unlock-state.yml.
 # Usage: scripts/force-unlock.sh <lock-id>
 #
 # A cancelled or killed run can leave its lock behind, and then every plan and apply fails on it.

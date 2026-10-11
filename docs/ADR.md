@@ -91,7 +91,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Context:** Every pipeline needs roles and a state bucket before it can run, and all AWS changes must go through GitHub Actions. An account can hold only one OIDC provider per URL.
 
-**Decision:** The OIDC provider and the `shiptrack-bootstrap` seed role (AdministratorAccess, trusted only for the protected `bootstrap` environment of the platform repository) are created by hand. Terraform reads the provider by data source and does not manage the seed role. `bootstrap-apply.yml` creates the state bucket, the permission boundary, and the nine deploy roles. On the first run only the state bucket is created with local state, which is then migrated into the bucket before anything else is applied.
+**Decision:** The OIDC provider and the `shiptrack-bootstrap` seed role (AdministratorAccess, trusted only for the protected `bootstrap` environment of the platform repository) are created by hand. Terraform reads the provider by data source and does not manage the seed role. `apply-bootstrap.yml` creates the state bucket, the permission boundary, and the nine deploy roles. On the first run only the state bucket is created with local state, which is then migrated into the bucket before anything else is applied.
 
 **Consequences:** Pipelines cannot modify their own foundation. The seed role is the most privileged credential in the account and is tracked as risk R-10; narrow or delete it once bootstrap no longer needs to change. A failure while creating the bucket on the first run needs the recovery steps in `bootstrap/README.md`.
 
@@ -137,7 +137,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Decision:** The platform apply role carries explicit denies on the bootstrap-owned roles, the boundary policy, the state bucket and key, and the other stacks' state prefixes. The legacy and modern apply roles deny key-changing actions on keys with a platform alias. The legacy apply role also denies creating key pairs, matching the no-SSH rule.
 
-**Consequences:** A privilege-escalation path through the platform pipeline is closed. Changes to bootstrap-owned resources always go through bootstrap-apply.yml.
+**Consequences:** A privilege-escalation path through the platform pipeline is closed. Changes to bootstrap-owned resources always go through apply-bootstrap.yml.
 
 
 ## ADR-0010: local-verification-with-moto
@@ -168,7 +168,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Decision:** The deploy roles and the seed role trust the immutable subject. Bootstrap takes the owner ID from the workflow context (`github.repository_owner_id`) and the repository IDs from the `REPO_IDS` repository variable on the platform repository. The IDs are public and carry no account information.
 
-**Consequences:** A renamed or transferred repository keeps its trust only if its IDs are unchanged, and a deleted and recreated repository does not inherit it. The documented subject forms cover branch refs; the `environment` and `pull_request` suffixes follow the same pattern but are not shown in GitHub's documentation. The `:environment:bootstrap` suffix is confirmed: the seed role was assumed by the first `bootstrap-apply` run. The `pull_request` and `ref:refs/heads/dev` suffixes are confirmed by the first plan-role run **[VERIFY]**.
+**Consequences:** A renamed or transferred repository keeps its trust only if its IDs are unchanged, and a deleted and recreated repository does not inherit it. The documented subject forms cover branch refs; the `environment` and `pull_request` suffixes follow the same pattern but are not shown in GitHub's documentation. The `:environment:bootstrap` suffix is confirmed: the seed role was assumed by the first `apply-bootstrap` run. The `pull_request` and `ref:refs/heads/dev` suffixes are confirmed by the first plan-role run **[VERIFY]**.
 
 ## ADR-0013: terraform-workflow-structure
 
@@ -176,9 +176,9 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Context:** §6.11 lists the pull-request checks in one sequence that starts with `init` under the plan role. The state bucket name contains the account ID, so the backend cannot be committed, and fork pull requests receive no OIDC token.
 
-**Decision:** `terraform-pr.yml` has two jobs. `lint` (format, `validate` with `init -backend=false`, TFLint, Checkov, Trivy) needs no AWS access and runs for forks. `plan` runs only for same-repository pull requests, after `lint`, under the plan role. Both `plan` and `terraform-apply.yml` run `scripts/terraform-ci.sh`, which looks up the account, derives the bucket name `shiptrack-tfstate-<account>-<region>` as bootstrap does, and passes the backend settings to `init`, so `terraform/envs/dev/backend.tf` holds only an empty `backend "s3" {}` block. Trivy runs twice over the repository: once for the SARIF report sent to code scanning, once as the gate. Checkov is installed with `pipx` at a pinned version because it has no action to pin to a SHA.
+**Decision:** `ci-terraform.yml` has two jobs. `lint` (format, `validate` with `init -backend=false`, TFLint, Checkov, Trivy) needs no AWS access and runs for forks. `plan` runs only for same-repository pull requests, after `lint`, under the plan role. Both `plan` and `apply-terraform.yml` run `scripts/terraform-ci.sh`, which looks up the account, derives the bucket name `shiptrack-tfstate-<account>-<region>` as bootstrap does, and passes the backend settings to `init`, so `terraform/envs/dev/backend.tf` holds only an empty `backend "s3" {}` block. Trivy runs twice over the repository: once for the SARIF report sent to code scanning, once as the gate. Checkov is installed with `pipx` at a pinned version because it has no action to pin to a SHA.
 
-**Consequences:** Lint runs on every Terraform pull request without credentials. The apply workflow's path filter is `terraform/**` only, so edits to the workflow or the script are exercised by the plan job on the pull request rather than by an approval-gated apply. `terraform-apply.yml` fails if `terraform/envs/dev` does not exist when `terraform/**` changes, which P1 prevents by adding both together.
+**Consequences:** Lint runs on every Terraform pull request without credentials. The apply workflow's path filter is `terraform/**` only, so edits to the workflow or the script are exercised by the plan job on the pull request rather than by an approval-gated apply. `apply-terraform.yml` fails if `terraform/envs/dev` does not exist when `terraform/**` changes, which P1 prevents by adding both together.
 
 ## ADR-0014: p1-network-and-keys
 
@@ -299,7 +299,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - Access Analyzer: a second account analyzer is not created. The account's own satisfies design §6.7. `manage_access_analyzer` is off in `dev`; the module still creates one where the account has none.
 - Inspector and Security Hub: the Inspector enabler (create and delete) and each Security Hub standard (create and delete) wait up to 20 minutes (`inspector_timeout`, `security_hub_timeout`). The first adoption apply ran out of the provider's five-minute and three-minute defaults, while Config recording, the Security Hub account, and the CIS subscription had succeeded. A resource that timed out while waiting is tainted in state, so the next plan replaces it, which disables and enables scanning, or removes and re-adds the standard.
 - The `import` blocks are removed in a later change, once an apply has imported the two resources.
-- `.github/workflows/inspect-account.yml` stays as a read-only diagnostic that lists these services by name and status, without ARNs or account IDs.
+- A read-only diagnostic workflow listed these services by name and status, without ARNs or account IDs, while they were being adopted; it was removed once they were.
 
 **Consequences:** The Config setup that existed before this project is changed. The old `config-bucket-*` bucket is left as it is. A fresh account without these services needs the defaults (`shiptrack-recorder`, `shiptrack-delivery`, `manage_access_analyzer = true`) and no import blocks.
 
@@ -326,15 +326,15 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Decision:** `cloudwatch:PutCompositeAlarm` moves out of the `AlarmsAndDashboards` statement into its own `CompositeAlarms` statement in `bootstrap/policies/modern.tf`, with `Resource: *` and an `aws:RequestedRegion` condition. Everything else in the statement stays scoped to `shiptrack-modern-*`. Only the modern apply role gets it; legacy and platform create no composite alarms.
 
-**Consequences:** The modern pipeline can create a composite alarm of any name in the region. A composite alarm only reads the state of other alarms and notifies the actions it names, so the exposure is a misleading alarm, not access to data or resources. The change reaches the role through `bootstrap-apply.yml`, run by hand in the `bootstrap` environment. If CloudWatch ever accepts a scoped grant, the statement can fold back into `AlarmsAndDashboards`.
+**Consequences:** The modern pipeline can create a composite alarm of any name in the region. A composite alarm only reads the state of other alarms and notifies the actions it names, so the exposure is a misleading alarm, not access to data or resources. The change reaches the role through `apply-bootstrap.yml`, run by hand in the `bootstrap` environment. If CloudWatch ever accepts a scoped grant, the statement can fold back into `AlarmsAndDashboards`.
 
 ## ADR-0025: state-lock-recovery-workflow
 
 **Status:** Accepted
 
-**Context:** A platform `terraform-apply` run cancelled by hand left its state lock behind. The lock outlived the run by more than a day, and every pull request plan and every later apply failed on it. Clearing it needs write access to the state bucket, which only a pipeline role has, since nothing is applied from a workstation.
+**Context:** A platform `apply-terraform` run cancelled by hand left its state lock behind. The lock outlived the run by more than a day, and every pull request plan and every later apply failed on it. Clearing it needs write access to the state bucket, which only a pipeline role has, since nothing is applied from a workstation.
 
-**Decision:** `.github/workflows/unlock-state.yml` runs `scripts/force-unlock.sh` by hand in the `dev` environment, so a reviewer approves each run, with the apply role. It takes the lock ID from the failing run's message. The script reads the lock object in the state bucket and refuses unless the ID matches exactly and the lock is older than 30 minutes. It shares `terraform-apply`'s concurrency group, so it waits for a running apply instead of racing it.
+**Decision:** `.github/workflows/ops-unlock-state.yml` runs `scripts/force-unlock.sh` by hand in the `dev` environment, so a reviewer approves each run, with the apply role. It takes the lock ID from the failing run's message. The script reads the lock object in the state bucket and refuses unless the ID matches exactly and the lock is older than 30 minutes. It shares `apply-terraform`'s concurrency group, so it waits for a running apply instead of racing it.
 
 **Consequences:** A stale lock is cleared by a reviewed pipeline run instead of someone's own credentials. A lock younger than 30 minutes cannot be removed this way, which is the case where removing it could corrupt a run that is still writing state. The workflow covers `terraform/envs/dev` only; the bootstrap and legacy and modern states are separate and would need their own.
 
@@ -357,10 +357,10 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:**
 - The contract suite is checked against the real legacy application, not only by reading the spec: it was run against a local instance and found the real behaviour (a malformed shipment id is a plain 404, an over-long idempotency key is a 422 validation error, event ingestion is asynchronous so the suite polls the track view). `SINGLE_STACK=1` lets the POD tests run when `BASE_URL` points straight at one stack and not at the ALB; without it they need `TARGET` set, as the design requires.
 - A test fails if any endpoint in the legacy §3.4 table has no test, so the suite cannot quietly fall behind the spec.
-- Modern's `deploy.yml` consumes the suite as `cd validation/contract && TARGET=modern uv run --frozen pytest -m smoke`, with `BASE_URL` and `TEST_TOKEN` from the environment, so the `smoke` marker, the lockfile, and those variable names are an interface and change only together.
-- `validation.yml` adds a fourth suite, `contract-ui-parity`, for cutover gate G6, and runs `contract-full` without the parity tests, which need both stacks. It uploads nothing: a failure message can contain the ALB address, which is masked in the log but not in a file.
-- `drift.yml` runs nightly on `dev` with the plan role (no environment, so the `ref:refs/heads/dev` trust applies). `terraform-ci.sh drift` exits 0, 2, or 1; exit 2 opens or updates one issue, "Drift detected: platform/dev", with addresses and actions only, and a clean plan closes it. Exit 1 fails the job. It passes `TF_VAR_preview_ingress_cidrs` from the same secret as the apply and registers the addresses as masked values, as ADR-0026 requires of every workflow that plans `terraform/envs/dev`; without it the preview listener would look like drift to destroy every night.
-- `validation-ci.yml` runs on pull requests that touch `validation/` or `scripts/`: lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests for `terraform-ci.sh` (the drift exit codes and the masking of identifiers, against fake `aws` and `terraform` programs) and for `force-unlock.sh`.
+- Modern's `deploy-app.yml` consumes the suite as `cd validation/contract && TARGET=modern uv run --frozen pytest -m smoke`, with `BASE_URL` and `TEST_TOKEN` from the environment, so the `smoke` marker, the lockfile, and those variable names are an interface and change only together.
+- `check-live-stack.yml` adds a fourth suite, `contract-ui-parity`, for cutover gate G6, and runs `contract-full` without the parity tests, which need both stacks. It uploads nothing: a failure message can contain the ALB address, which is masked in the log but not in a file.
+- `check-drift.yml` runs nightly on `dev` with the plan role (no environment, so the `ref:refs/heads/dev` trust applies). `terraform-ci.sh drift` exits 0, 2, or 1; exit 2 opens or updates one issue, "Drift detected: platform/dev", with addresses and actions only, and a clean plan closes it. Exit 1 fails the job. It passes `TF_VAR_preview_ingress_cidrs` from the same secret as the apply and registers the addresses as masked values, as ADR-0026 requires of every workflow that plans `terraform/envs/dev`; without it the preview listener would look like drift to destroy every night.
+- `ci-validation.yml` runs on pull requests that touch `validation/` or `scripts/`: lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests for `terraform-ci.sh` (the drift exit codes and the masking of identifiers, against fake `aws` and `terraform` programs) and for `force-unlock.sh`.
 - The k6 summary JSON holds metrics only, with no URLs or headers; routes are tagged by name, not by address.
 
 **Consequences:** The UI checks cannot be run against the bare application process, because nginx serves `/ui/` in legacy; they run against a deployed stack. The k6 baseline against the bare application shows its UI iterations as failures for the same reason. Any new workflow that plans `terraform/envs/dev` has to pass the preview secret too.
@@ -372,9 +372,9 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Context:** The design's break-glass rollback (§7) is a human with their own admin role running `aws elbv2` commands from a list in `var.breakglass_principal_arns`. That variable was never built, and the person who runs this project has no AWS CLI access: the pipeline roles are assumable only by GitHub OIDC, by design. The only rollback left was a pull request, review, and apply, which is the wrong speed for an incident. Judging the gates (G2 to G5) and the wave 0 exit criterion on Inspector had the same problem: the console and the CLI are not available, and reading them out of a public log must not print an identifier.
 
 **Decision:**
-- **`rollback-cutover.yml`** runs `scripts/rollback-cutover.sh` with the apply role behind the `dev` environment's reviewer. It rewrites only weights, only on actions that forward to both target groups, keeps stickiness, leaves the header rules and the preview listener alone, is idempotent, and verifies the result. `drift.yml` reports the difference from `var.cutover` until a pull request reconciles it within 24 hours (design R-06).
-- **`cutover-gates.yml`** runs `scripts/cutover-gates.sh` with the read-only plan role and prints a table: G2 and G3 from `RequestCount`, `HTTPCode_Target_5XX_Count`, and `TargetResponseTime` p95 on each target group, G4 from the alarms in `ALARM`, and G5 from the events queue and the dead-letter queues. A gate without at least `MIN_REQUESTS` on each target group is `NO DATA`, never a pass. G1 and G6 stay in `validation.yml`.
-- **`security-findings.yml`** runs `scripts/security-findings.sh` with the plan role: Inspector findings by severity and fix availability, failing on a fixable CRITICAL or HIGH, and Security Hub CRITICAL and HIGH by control title. It says so when Security Hub cannot be read, instead of showing none.
+- **`ops-rollback-cutover.yml`** runs `scripts/rollback-cutover.sh` with the apply role behind the `dev` environment's reviewer. It rewrites only weights, only on actions that forward to both target groups, keeps stickiness, leaves the header rules and the preview listener alone, is idempotent, and verifies the result. `check-drift.yml` reports the difference from `var.cutover` until a pull request reconciles it within 24 hours (design R-06).
+- **`check-cutover-gates.yml`** runs `scripts/cutover-gates.sh` with the read-only plan role and prints a table: G2 and G3 from `RequestCount`, `HTTPCode_Target_5XX_Count`, and `TargetResponseTime` p95 on each target group, G4 from the alarms in `ALARM`, and G5 from the events queue and the dead-letter queues. A gate without at least `MIN_REQUESTS` on each target group is `NO DATA`, never a pass. G1 and G6 stay in `check-live-stack.yml`.
+- **`check-security-findings.yml`** runs `scripts/security-findings.sh` with the plan role: Inspector findings by severity and fix availability, failing on a fixable CRITICAL or HIGH, and Security Hub CRITICAL and HIGH by control title. It says so when Security Hub cannot be read, instead of showing none.
 - All three print counts, ratios, seconds, alarm names, and public finding titles, and no ARN, account ID, resource identifier, or address.
 - `docs/runbooks/cutover.md` holds the wave procedures with the exact `tfvars` diff per step and one section per alarm, because every alarm description already links to `cutover.md#<alarm>`; `docs/runbooks/break-glass-rollback.md` holds the rollback.
 
@@ -384,7 +384,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 
 **Status:** Accepted
 
-**Context:** ADR-0028's `security-findings.yml` failed the gate on every account-wide fixable CRITICAL or HIGH Inspector finding. Inspector is enabled for the whole account, and the first run counted 82 fixable findings on EC2 instances: some on ShipTrack's, some on instances this project does not own. The wave 0 exit criterion in modern's design is "0 fixable CRITICAL/HIGH in deployed images". A gate that another team's instance can fail says nothing about the cutover, and one that counts legacy's deliberately pinned AMI (AP-14) as a failure cannot pass until legacy is gone.
+**Context:** ADR-0028's `check-security-findings.yml` failed the gate on every account-wide fixable CRITICAL or HIGH Inspector finding. Inspector is enabled for the whole account, and the first run counted 82 fixable findings on EC2 instances: some on ShipTrack's, some on instances this project does not own. The wave 0 exit criterion in modern's design is "0 fixable CRITICAL/HIGH in deployed images". A gate that another team's instance can fail says nothing about the cutover, and one that counts legacy's deliberately pinned AMI (AP-14) as a failure cannot pass until legacy is gone.
 
 **Decision:**
 - Each finding is placed in a scope from its resource: **modern** is an ECR repository named `shiptrack/...`, a node tagged `eks:cluster-name=shiptrack`, or a resource tagged `Stack=modern`; **legacy** is a resource tagged `Stack=legacy`; **other** is everything else in the account.
@@ -402,9 +402,9 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:**
 - A weight step is judged over an **evidence window** in which each target group saw at least `MIN_REQUESTS` requests (default 100). With less, a gate says `NO DATA`, which is not a pass, and the step does not advance.
 - A step advances when G1 to G4 pass (G5 from wave 2). The handoff starts when wave 2 is at 100% with G1 to G5 passing, and legacy is destroyed once the wave 3 checks (one alert per breach, contract migration applied) are verified.
-- No fixed duration is part of the design. `window_minutes` stays a parameter of `cutover-gates.yml`, because a window is how a gate is measured; the operator sets it to cover the load.
+- No fixed duration is part of the design. `window_minutes` stays a parameter of `check-cutover-gates.yml`, because a window is how a gate is measured; the operator sets it to cover the load.
 
-**Consequences:** The migration can complete as fast as the gates allow. A fault that shows only over hours (a nightly job, a connection leak, a cache expiry, a daily traffic shape) is not caught by a gate that passes in minutes, and the 7-day legacy retention that served as a second rollback window is gone: after the wave 3 contract migration rollback is forward-fix only, as before, and the only remaining safety net before it is `rollback-cutover.yml`. The alarms, the nightly drift check and the SLO burn alarms keep running after each step, so a late fault still pages; it just no longer holds the next step back.
+**Consequences:** The migration can complete as fast as the gates allow. A fault that shows only over hours (a nightly job, a connection leak, a cache expiry, a daily traffic shape) is not caught by a gate that passes in minutes, and the 7-day legacy retention that served as a second rollback window is gone: after the wave 3 contract migration rollback is forward-fix only, as before, and the only remaining safety net before it is `ops-rollback-cutover.yml`. The alarms, the nightly drift check and the SLO burn alarms keep running after each step, so a late fault still pages; it just no longer holds the next step back.
 
 ## ADR-0031: g3-per-route-with-an-event-route-allowance
 
@@ -415,7 +415,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:**
 - G3 is judged per route from one runner, with `k6-baseline` and `TARGET=both`: every route's p95 is at most 1.2 times legacy's, except `POST /events`.
 - `POST /api/v1/shipments/{id}/events` is allowed a p95 of at most legacy's plus 50 ms. The measured gap was 23.5 ms in this environment, and 30 ms with a more distant runner; the bound has margin over both.
-- The target-group figure from `cutover-gates.yml` is still printed and is information, because it mixes route shares that change as the weights move.
+- The target-group figure from `check-cutover-gates.yml` is still printed and is information, because it mixes route shares that change as the weights move.
 
 **Consequences:** The allowance is the price of durable event ingestion, written down, instead of a failure that stays open. It is only measured on a short synthetic run, so a regression in the other routes is still caught at 1.2, and a regression in the event route past 50 ms is caught as well. The aggregate can read above 1.2 with every route within its bound. Reducing the gap (a shared SQS client, a regional endpoint) is a performance task and does not block the migration.
 

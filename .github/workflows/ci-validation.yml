@@ -1,4 +1,4 @@
-name: validation-ci
+name: ci-validation
 
 # Checks the validation tooling and the scripts that gate Terraform: lint and tests for the contract
 # suite and the simulator, `k6 inspect` for each load scenario, and the shell tests. None of this
@@ -9,7 +9,7 @@ on:
     paths:
       - "validation/**"
       - "scripts/**"
-      - ".github/workflows/validation-ci.yml"
+      - ".github/workflows/ci-validation.yml"
 
 permissions:
   contents: read

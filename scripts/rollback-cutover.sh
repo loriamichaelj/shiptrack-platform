@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Put all traffic back on legacy: weight legacy 100 and modern 0 on every weighted rule and on the
-# listener's default action. Run by .github/workflows/rollback-cutover.yml (break-glass, design §7).
+# listener's default action. Run by .github/workflows/ops-rollback-cutover.yml (break-glass, design §7).
 # Usage: scripts/rollback-cutover.sh
 #
 # It changes the ALB directly, without a pull request, so the weights then differ from
-# `var.cutover`. drift.yml reports that until a pull request sets `cutover` to match, which
+# `var.cutover`. check-drift.yml reports that until a pull request sets `cutover` to match, which
 # docs/runbooks/break-glass-rollback.md requires within 24 hours.
 #
 # Only rules that forward to both target groups are touched: the header rules for tests (one

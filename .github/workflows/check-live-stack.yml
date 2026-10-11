@@ -1,4 +1,4 @@
-name: validation
+name: check-live-stack
 
 # Runs the shared definition of "correct" against the live ALB: the contract suite or a k6 baseline,
 # against one stack. It runs on `dev` with the platform plan role (whose trust includes

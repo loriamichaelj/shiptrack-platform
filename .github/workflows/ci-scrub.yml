@@ -1,4 +1,4 @@
-name: scrub
+name: ci-scrub
 
 # Fails a pull request that adds a secret or an identifier that must not appear in a public
 # repository: AWS account IDs and ALB DNS names (design §6.12), plus gitleaks' default secret rules.

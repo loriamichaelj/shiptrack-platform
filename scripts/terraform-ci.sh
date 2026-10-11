@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Plan or apply terraform/envs/dev. Run by .github/workflows/terraform-pr.yml, terraform-apply.yml,
-# and drift.yml.
+# Plan or apply terraform/envs/dev. Run by .github/workflows/ci-terraform.yml, apply-terraform.yml,
+# and check-drift.yml.
 # Usage: scripts/terraform-ci.sh plan|apply|drift
 #
 # `drift` plans with -detailed-exitcode and exits 0 (no changes), 2 (changes), or 1 (error), so the

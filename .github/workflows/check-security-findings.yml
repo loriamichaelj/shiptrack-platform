@@ -1,4 +1,4 @@
-name: security-findings
+name: check-security-findings
 
 # Summarises the account's active Inspector findings and the CRITICAL and HIGH Security Hub
 # findings as counts and finding titles, with the read-only plan role. It fails when Inspector has

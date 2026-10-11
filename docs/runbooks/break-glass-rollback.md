@@ -37,7 +37,7 @@ Does not change:
 
 ## Afterwards, within 24 hours
 
-The nightly `drift.yml` reports the difference as an issue titled "Drift detected: platform/dev"
+The nightly `check-drift.yml` reports the difference as an issue titled "Drift detected: platform/dev"
 until it is reconciled (design risk R-06). Open a pull request that sets the weights in
 `terraform/envs/dev/terraform.tfvars` to what the ALB now has:
 

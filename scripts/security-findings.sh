@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Summarise the account's active Inspector findings, and the CRITICAL and HIGH Security Hub
-# findings, as counts and finding titles. Run by .github/workflows/security-findings.yml with the
+# findings, as counts and finding titles. Run by .github/workflows/check-security-findings.yml with the
 # read-only plan role.
 # Usage: scripts/security-findings.sh
 #
