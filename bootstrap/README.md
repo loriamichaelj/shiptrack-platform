@@ -196,8 +196,11 @@ with S3 native lock files (`use_lockfile`; no DynamoDB).
 - **The run failed while creating the bucket**: nothing is stored yet. If the bucket exists, import it
   from a workstation with credentials, or delete the empty bucket and re-run:
   `terraform import module.state.aws_s3_bucket.state <bucket-name>` (then re-run the workflow).
-- **A stuck lock** (`bootstrap/terraform.tfstate.tflock` left behind by a cancelled run): delete that
-  one object from the bucket after confirming no run is in progress.
+- **A stuck lock on the bootstrap state** (`bootstrap/terraform.tfstate.tflock` left behind by a
+  cancelled run): delete that one object from the bucket after confirming no run is in progress.
+- **A stuck lock on `terraform/envs/dev`** (every plan and apply fails with `Error acquiring the state
+  lock`): run `unlock-state.yml` with the lock ID from the error and approve the `dev` gate. It refuses
+  a lock with another ID or one younger than 30 minutes (ADR-0025).
 - **A role needs a new permission**: change `bootstrap/policies/` and re-run the workflow. A missing
   permission appears as `AccessDenied` in the failing pipeline, and the fix always lands here.
 
