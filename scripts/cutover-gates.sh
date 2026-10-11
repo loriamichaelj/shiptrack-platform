@@ -115,21 +115,25 @@ else
   add "G3 Latency" "FAIL" "modern p95 <= 1.2 x legacy p95" "legacy $(ms "$p95_l") ms, modern $(ms "$p95_m") ms"
 fi
 
-# G4: alarms in ALARM state. SEV1 or a pod restart alarm fails the gate.
+# G4: alarms in ALARM state. SEV1 or a pod restart alarm fails the gate. An alarm created with its
+# actions off (the SLA scan heartbeat, until the CronJob takes over in wave 3) is in ALARM by design
+# and notifies no one, so it is counted apart and does not fail the gate.
 alarms=$(aws cloudwatch describe-alarms --state-value ALARM --output json)
-sev1=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
-               | select((.AlarmDescription // "") | test("SEV1"))
-               | select(.AlarmName | test("pod-restarts") | not) | .AlarmName] | join(", ")' <<<"$alarms")
-restarts=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
-                   | select(.AlarmName | test("pod-restarts")) | .AlarmName] | join(", ")' <<<"$alarms")
-sev2_names=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
-                    | select((.AlarmDescription // "") | test("SEV2")) | .AlarmName] | join(", ")' <<<"$alarms")
-sev2=$(jq -r '[(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))
-               | select((.AlarmDescription // "") | test("SEV2")) | .AlarmName] | length' <<<"$alarms")
+live='(.MetricAlarms[]?, .CompositeAlarms[]?) | select(.AlarmName | startswith("shiptrack"))'
+sev1=$(jq -r "[$live | select(.ActionsEnabled != false)
+               | select((.AlarmDescription // \"\") | test(\"SEV1\"))
+               | select(.AlarmName | test(\"pod-restarts\") | not) | .AlarmName] | join(\", \")" <<<"$alarms")
+restarts=$(jq -r "[$live | select(.ActionsEnabled != false)
+                   | select(.AlarmName | test(\"pod-restarts\")) | .AlarmName] | join(\", \")" <<<"$alarms")
+sev2_names=$(jq -r "[$live | select(.ActionsEnabled != false)
+                    | select((.AlarmDescription // \"\") | test(\"SEV2\")) | .AlarmName] | join(\", \")" <<<"$alarms")
+sev2=$(jq -r "[$live | select(.ActionsEnabled != false)
+               | select((.AlarmDescription // \"\") | test(\"SEV2\")) | .AlarmName] | length" <<<"$alarms")
+muted=$(jq -r "[$live | select(.ActionsEnabled == false) | .AlarmName] | length" <<<"$alarms")
 if [[ -n "$sev1" || -n "$restarts" ]]; then
   add "G4 Stability" "FAIL" "no SEV1 alarm, no pod restarts from the release" "in ALARM: ${sev1:+$sev1}${sev1:+${restarts:+, }}${restarts}"
 else
-  add "G4 Stability" "PASS" "no SEV1 alarm, no pod restarts from the release" "no SEV1 in ALARM; $sev2 SEV2 in ALARM${sev2_names:+ ($sev2_names)}"
+  add "G4 Stability" "PASS" "no SEV1 alarm, no pod restarts from the release" "no SEV1 in ALARM; $sev2 SEV2 in ALARM${sev2_names:+ ($sev2_names)}; $muted with actions disabled, not counted"
 fi
 
 # G5 (wave 2 and later): the events queue and the dead-letter queues.
