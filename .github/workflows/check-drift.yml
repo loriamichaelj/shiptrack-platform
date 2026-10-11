@@ -1,4 +1,4 @@
-name: drift
+name: check-drift
 
 # Every night, plans terraform/envs/dev and compares it with what is deployed. Changes mean someone
 # changed AWS outside the pipeline (a break-glass weight change, for example), and the platform
@@ -43,7 +43,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           mask-aws-account-id: true
-      # Mask the preview addresses before any step can print them (see terraform-apply.yml).
+      # Mask the preview addresses before any step can print them (see apply-terraform.yml).
       - name: Mask the preview addresses
         env:
           PREVIEW_CIDRS: ${{ secrets.PREVIEW_CIDRS }}
@@ -62,7 +62,7 @@ jobs:
           TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
           TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
           TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
-          # Must match terraform-apply.yml. Without it the plan sees the preview listener and its
+          # Must match apply-terraform.yml. Without it the plan sees the preview listener and its
           # rule as things to destroy and reports drift every night.
           TF_VAR_preview_ingress_cidrs: ${{ secrets.PREVIEW_CIDRS || '[]' }}
           SUMMARY_FILE: ${{ runner.temp }}/drift-summary.md

@@ -1,4 +1,4 @@
-name: unlock-state
+name: ops-unlock-state
 
 # Removes a stale Terraform state lock on terraform/envs/dev. A cancelled or killed run can leave its
 # lock behind, and then every plan and apply fails on it. Run it by hand with the lock ID from the

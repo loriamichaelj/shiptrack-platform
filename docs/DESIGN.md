@@ -116,7 +116,7 @@ Default region is the `aws_region` variable (default `us-east-1`).
 
 ```
 shiptrack-platform/
-├── bootstrap/                    # Applied only by bootstrap-apply.yml (seed role, §6.1)
+├── bootstrap/                    # Applied only by apply-bootstrap.yml (seed role, §6.1)
 │   ├── main.tf  variables.tf  outputs.tf  versions.tf  .terraform.lock.hcl
 │   ├── state/                    # Module: state bucket and its key
 │   ├── policies/                 # Module: boundary, trust policies, and each role's permissions
@@ -153,11 +153,11 @@ shiptrack-platform/
 │   └── security/findings-register.md
 ├── .github/
 │   ├── workflows/
-│   │   ├── bootstrap-apply.yml
-│   │   ├── terraform-pr.yml
-│   │   ├── terraform-apply.yml
-│   │   ├── drift.yml
-│   │   └── validation.yml
+│   │   ├── apply-bootstrap.yml
+│   │   ├── ci-terraform.yml
+│   │   ├── apply-terraform.yml
+│   │   ├── check-drift.yml
+│   │   └── check-live-stack.yml
 │   ├── dependabot.yml            # github-actions + uv
 │   └── CODEOWNERS                # .github/ and bootstrap/ (R-09)
 ├── .tflint.hcl  .checkov.yaml  .pre-commit-config.yaml  .gitleaks.toml  .gitignore
@@ -170,7 +170,7 @@ shiptrack-platform/
 
 ### 6.1 Bootstrap (`bootstrap/`)
 
-Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a state bucket before any pipeline can run. It is applied **only by the `bootstrap-apply.yml` workflow**, using a manually created seed role. Nothing is ever applied from a workstation.
+Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a state bucket before any pipeline can run. It is applied **only by the `apply-bootstrap.yml` workflow**, using a manually created seed role. Nothing is ever applied from a workstation.
 
 **Manual prerequisites (a human, once; documented in `bootstrap/README.md`):**
 1. In the AWS account, create the GitHub OIDC provider (values below).
@@ -180,7 +180,7 @@ Bootstrap solves the chicken-and-egg problem: the pipelines need roles and a sta
 
 Terraform does **not** manage the OIDC provider or the seed role. It reads the provider with `data "aws_iam_openid_connect_provider"`. Keeping the seed role manual means the pipeline cannot modify its own foundation.
 
-**`bootstrap-apply.yml`** (`workflow_dispatch`): jobs `plan` and `apply`, both with `environment: bootstrap`, running `bootstrap/scripts/ci.sh`. The second approval is the review of the plan summary (§6.12) printed by the first job. `bootstrap/` has no committed backend block. The script checks whether the state bucket exists (`head-bucket`):
+**`apply-bootstrap.yml`** (`workflow_dispatch`): jobs `plan` and `apply`, both with `environment: bootstrap`, running `bootstrap/scripts/ci.sh`. The second approval is the review of the plan summary (§6.12) printed by the first job. `bootstrap/` has no committed backend block. The script checks whether the state bucket exists (`head-bucket`):
 - **First run:** create only the bucket, with local state; generate `backend.tf` (git-ignored) and run `terraform init -migrate-state -force-copy` in the same job; then plan and apply everything else with remote state. Keeping the local-state step to one resource keeps the window in which state could be lost as small as possible.
 - **Later runs:** write `backend.tf` first and initialize against S3.
 
@@ -201,7 +201,7 @@ Apply uses a fresh plan from the same job. No plan file is uploaded as an artifa
 | `modern/cluster/dev.tfstate` | modern (cluster root) |
 | `modern/addons/dev.tfstate` | modern (addons root) |
 
-- Bootstrap's own state starts local inside the first `bootstrap-apply.yml` run and is migrated into the bucket in that same job, before anything else is created. `bootstrap/README.md` documents the procedure and the recovery if the migration step fails.
+- Bootstrap's own state starts local inside the first `apply-bootstrap.yml` run and is migrated into the bucket in that same job, before anything else is created. `bootstrap/README.md` documents the procedure and the recovery if the migration step fails.
 
 **GitHub OIDC provider:** created manually (prerequisite 1): URL `https://token.actions.githubusercontent.com`, client ID `sts.amazonaws.com`. Omit the thumbprint if the console allows it, since AWS no longer validates the GitHub thumbprint **[VERIFY]**. Only one provider per URL can exist in an account, which is why Terraform reads it by data source instead of creating it.
 
@@ -306,7 +306,7 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
   - `ALTER DEFAULT PRIVILEGES FOR ROLE shiptrack_migrator IN SCHEMA shiptrack GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO shiptrack_app` (and `USAGE, SELECT` on sequences)
   - Enables `pgcrypto` only if required (`gen_random_uuid()` is built in on PG 13+).
 - **`db/RUNBOOK-db-bootstrap.md`**:
-  1. Execute from an **AWS CloudShell VPC environment** in a private-app subnet with `shiptrack-db-client` attached, so no bastion host is needed, or, where CloudShell is not available, from a legacy host through the legacy `db-bootstrap` workflow (legacy ADR-0011).
+  1. Execute from an **AWS CloudShell VPC environment** in a private-app subnet with `shiptrack-db-client` attached, so no bastion host is needed, or, where CloudShell is not available, from a legacy host through the legacy `ops-db-bootstrap` workflow (legacy ADR-0011).
   2. Fetch the master and app passwords from Secrets Manager into shell variables.
   3. Run `psql "sslmode=verify-full" -v … -f bootstrap.sql`.
   4. Verify roles and grants.
@@ -531,11 +531,11 @@ These tools own the **shared definition of correct** for both stacks.
 - Every request is tagged with `target`.
 - Writes the summary JSON to `loadtest/results/<scenario>-<target>-<ts>.json`. These files are the before/after evidence.
 
-**`.github/workflows/validation.yml`** (`workflow_dispatch`): inputs are `suite` (contract-smoke | contract-full | k6-baseline) and `target`. It runs on `dev` and uses `<PREFIX>-platform-plan` (its trust includes `ref:refs/heads/dev`) to read `base_url` and the test token. Legacy and modern workflows consume `validation/` by checking this repository out at a pinned commit SHA; the repository is public, so no token is needed.
+**`.github/workflows/check-live-stack.yml`** (`workflow_dispatch`): inputs are `suite` (contract-smoke | contract-full | k6-baseline) and `target`. It runs on `dev` and uses `<PREFIX>-platform-plan` (its trust includes `ref:refs/heads/dev`) to read `base_url` and the test token. Legacy and modern workflows consume `validation/` by checking this repository out at a pinned commit SHA; the repository is public, so no token is needed.
 
 ### 6.11 CI/CD for this repo
 
-- **`terraform-pr.yml`** (pull_request, paths `terraform/**`, `bootstrap/**`)
+- **`ci-terraform.yml`** (pull_request, paths `terraform/**`, `bootstrap/**`)
   1. `terraform fmt -check -recursive`
   2. `init` (plan role)
   3. `validate`
@@ -544,12 +544,12 @@ These tools own the **shared definition of correct** for both stacks.
   6. `trivy config`
   7. `plan -out` (never uploaded as an artifact) with an address-and-action-only summary posted as a PR comment (§6.12); SARIF uploaded to code scanning
 
-  `bootstrap/` gets the same lint and scan steps but is never planned here; it is planned and applied only by `bootstrap-apply.yml` (§6.1).
-- **`terraform-apply.yml`** (push to `dev`): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
-- **`drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
-- **`rollback-cutover.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Break-glass: legacy = 100, modern = 0 on every weighted rule and the default action, without a pull request (ADR-0028).
-- **`cutover-gates.yml`** and **`security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over an evidence window from CloudWatch; the second summarises Inspector and Security Hub findings by scope (modern, legacy, other) and fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). Both print numbers and titles only (ADR-0028).
-- **`unlock-state.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Removes a stale state lock given its ID, and refuses a lock with another ID or one younger than 30 minutes (ADR-0025).
+  `bootstrap/` gets the same lint and scan steps but is never planned here; it is planned and applied only by `apply-bootstrap.yml` (§6.1).
+- **`apply-terraform.yml`** (push to `dev`): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
+- **`check-drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
+- **`ops-rollback-cutover.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Break-glass: legacy = 100, modern = 0 on every weighted rule and the default action, without a pull request (ADR-0028).
+- **`check-cutover-gates.yml`** and **`check-security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over an evidence window from CloudWatch; the second summarises Inspector and Security Hub findings by scope (modern, legacy, other) and fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). Both print numbers and titles only (ADR-0028).
+- **`ops-unlock-state.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Removes a stale state lock given its ID, and refuses a lock with another ID or one younger than 30 minutes (ADR-0025).
 - Every workflow that plans or applies `terraform/envs/dev` passes the preview CIDR secret and registers each address with `add-mask` before any step can print it (ADR-0026).
 - All workflows: `permissions: { id-token: write, contents: read, pull-requests: write }` (minimum per job). No long-lived AWS keys exist anywhere.
 
@@ -576,7 +576,7 @@ All three repositories are public.
 |---|---|
 | G1 Correctness | Contract suite passes against `TARGET=modern` |
 | G2 Errors | tg-modern 5xx ratio ≤ tg-legacy 5xx ratio + 0.5 pp |
-| G3 Latency | Per route, from one runner (`k6-baseline` with `TARGET=both`): p95 ≤ 1.2 × legacy's for every route except `POST /api/v1/shipments/{id}/events`, whose p95 is ≤ legacy's + 50 ms (ADR-0031). The target-group p95 that `cutover-gates.yml` prints is reported, and is not the criterion |
+| G3 Latency | Per route, from one runner (`k6-baseline` with `TARGET=both`): p95 ≤ 1.2 × legacy's for every route except `POST /api/v1/shipments/{id}/events`, whose p95 is ≤ legacy's + 50 ms (ADR-0031). The target-group p95 that `check-cutover-gates.yml` prints is reported, and is not the criterion |
 | G4 Stability | No SEV1 alarm in the evidence window; no pod restarts attributable to the release |
 | G5 Async health (Wave 2+) | Events queue age < 60 s, DLQ = 0 |
 | G6 UI build parity (before Wave 1) | `ui_parity` check passes: both stacks serve identical hashed UI asset filenames |
@@ -585,9 +585,9 @@ All three repositories are public.
 Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui/*` together). Wave 2 `default` 10 → 25 → 50 → 100.
 
 **`docs/runbooks/break-glass-rollback.md`**: use when an incident cannot wait for PR review.
-1. `rollback-cutover.yml` forces legacy = 100, modern = 0 for the weighted rules and the default action through `elbv2 modify-rule` and `modify-listener`. It runs with the apply role behind the `dev` environment's reviewer, so the person who approves a deploy can roll back without the AWS CLI. Pipeline roles trust GitHub OIDC only and cannot be assumed by humans, by design (ADR-0028). `scripts/rollback-cutover.sh` is the same code for an administrator with credentials.
+1. `ops-rollback-cutover.yml` forces legacy = 100, modern = 0 for the weighted rules and the default action through `elbv2 modify-rule` and `modify-listener`. It runs with the apply role behind the `dev` environment's reviewer, so the person who approves a deploy can roll back without the AWS CLI. Pipeline roles trust GitHub OIDC only and cannot be assumed by humans, by design (ADR-0028). `scripts/rollback-cutover.sh` is the same code for an administrator with credentials.
 2. Verification: the run's summary lists the weights before and after and ends by stating that all weighted routing is legacy 100, modern 0.
-3. **Within 24 h**, open a PR setting `var.cutover` to match; `drift.yml` will flag the drift until this is done.
+3. **Within 24 h**, open a PR setting `var.cutover` to match; `check-drift.yml` will flag the drift until this is done.
 4. Incident record template.
 
 ---
@@ -648,14 +648,14 @@ Platform optimization candidates for the final analysis: **O-P1** (NAT vs endpoi
 | R-07 | Plan roles have broad read (`ReadOnlyAccess`) | Accepted; enterprise would scope via SCP/session policies |
 | R-08 | Mixed UI builds across stacks during weighted routing | P90 group stickiness + gate G6 parity + UI source freeze until Wave 2 completes. Long-term fix: serve the UI from S3 + CloudFront (roadmap) |
 | R-09 | The platform plan role can read the DB secrets and is assumable by any `pull_request` run in the repo, and the workflow file comes from the PR branch | The repos are public: fork PRs receive no OIDC token, and only collaborators can push branches; require approval for workflows from outside collaborators; branch protection and `CODEOWNERS` on `dev` and `.github/`. Enterprise: keep secret-bearing resources in a separate state, or plan from `dev` only. |
-| R-10 | The seed role has `AdministratorAccess` and is created by hand | Trust pinned to one repo and the protected `bootstrap` environment (required reviewers); used only by `bootstrap-apply.yml`; narrowing or retirement tracked here |
+| R-10 | The seed role has `AdministratorAccess` and is created by hand | Trust pinned to one repo and the protected `bootstrap` environment (required reviewers); used only by `apply-bootstrap.yml`; narrowing or retirement tracked here |
 | R-11 | Public repos disclose the architecture, and logs or evidence can leak identifiers | §6.12 rules, masking, and the scrub check; no security control depends on secrecy of the design |
 
 ---
 
 ## 12. Acceptance criteria
 
-1. `bootstrap-apply.yml` applies cleanly in an account that has only the manually created OIDC provider and seed role, its state ends up in S3, and a second run is a no-op.
+1. `apply-bootstrap.yml` applies cleanly in an account that has only the manually created OIDC provider and seed role, its state ends up in S3, and a second run is a no-op.
 2. `terraform/envs/dev` plans with zero errors; `tflint`, `checkov`, and `trivy config` pass (or every skip is justified inline).
 3. Every SSM contract key in §6.9 exists after apply.
 4. RDS is reachable only from `shiptrack-db-client`; `bootstrap.sql` runs idempotently (second run is a no-op).
@@ -675,9 +675,9 @@ Platform optimization candidates for the final analysis: **O-P1** (NAT vs endpoi
 **Cross-repo build order** (all applies run through GitHub Actions; the agent never applies):
 
 1. Legacy application, locally and in CI (legacy L1, L1b, and the build parts of L2).
-2. Platform Foundation: P0, then **P6a** (`terraform-pr.yml` and `terraform-apply.yml`, built immediately after P0 because every later phase is applied through them), then P1, P2, P3, P5.
+2. Platform Foundation: P0, then **P6a** (`ci-terraform.yml` and `apply-terraform.yml`, built immediately after P0 because every later phase is applied through them), then P1, P2, P3, P5.
 3. Legacy infrastructure (legacy L3, L4). Needs the Foundation applied, and `db/bootstrap.sql` (§6.4 runbook) must have been run before the first legacy deploy.
-4. Platform remainder: P4, **P6b** (`drift.yml`, `validation.yml`), P7, P8. The legacy assessment (legacy L5) needs all of platform.
+4. Platform remainder: P4, **P6b** (`check-drift.yml`, `check-live-stack.yml`), P7, P8. The legacy assessment (legacy L5) needs all of platform.
 5. Modern application (modern M0–M2), built locally with OrbStack and LocalStack and tested in CI.
 6. Modern infrastructure and migration (modern M3–M10).
 
@@ -685,14 +685,14 @@ Phase numbers are otherwise unchanged, and each phase's "Done when" must pass be
 
 | Phase | Deliverables | Done when |
 |---|---|---|
-| **P0 Bootstrap** | `bootstrap/` (state bucket, state KMS key, boundary, 9 roles; OIDC provider read by data source), `bootstrap-apply.yml`, `scripts/ci.sh`, `scripts/github-setup.sh`, `tests/moto.sh`, README with the manual seed steps (§6.1) and workflow procedure | `terraform validate`, `tflint`, `trivy config`, and `checkov` pass; `actionlint` and `shellcheck` pass; `tests/moto.sh` passes; trust policies show exact `sub` strings in the README; after you run the workflow, the state is in S3 and a second run is a no-op |
+| **P0 Bootstrap** | `bootstrap/` (state bucket, state KMS key, boundary, 9 roles; OIDC provider read by data source), `apply-bootstrap.yml`, `scripts/ci.sh`, `scripts/github-setup.sh`, `tests/moto.sh`, README with the manual seed steps (§6.1) and workflow procedure | `terraform validate`, `tflint`, `trivy config`, and `checkov` pass; `actionlint` and `shellcheck` pass; `tests/moto.sh` passes; trust policies show exact `sub` strings in the README; after you run the workflow, the state is in S3 and a second run is a no-op |
 | **P1 Network + KMS** | `modules/network`, `modules/kms`, `envs/dev` wiring, backend config | Plan clean; subnet tags match §6.2 |
 | **P2 Database** | `modules/database`, secrets with write-only args, `db/bootstrap.sql`, `db/RUNBOOK-db-bootstrap.md` | SQL is idempotent (`psql` run twice against a local Postgres 17 container in a test script) |
 | **P3 Storage + Ingress** | `modules/storage`, `modules/ingress` (TGs, rules, `cutover` var with validation) | Plan shows 4 listener rules (P10, P20, P90, P100) + weighted default action; changing weights alters only rules/default action |
 | **P4 Security services** | `modules/security-services`, findings register template | Plan clean |
 | **P5 Observability + Contract** | `modules/observability` (SNS, alarms, dashboard JSON), `modules/contract` | Every alarm description contains owner/sev/runbook; all §6.9 keys present |
-| **P6 CI/CD** (P6a: `terraform-pr`, `terraform-apply`; P6b: `drift`, `validation`) | 3 Terraform workflows, the §6.12 scrub check, `.pre-commit-config.yaml`, `.tflint.hcl`, `.checkov.yaml` | `actionlint` passes; actions pinned to SHAs |
-| **P7 Validation tooling** | `validation/contract`, `simulator`, `loadtest`, `validation.yml` | `pytest --collect-only` lists every endpoint in the legacy §3.4 table; `k6 inspect` passes |
+| **P6 CI/CD** (P6a: `ci-terraform`, `apply-terraform`; P6b: `check-drift`, `check-live-stack`) | 3 Terraform workflows, the §6.12 scrub check, `.pre-commit-config.yaml`, `.tflint.hcl`, `.checkov.yaml` | `actionlint` passes; actions pinned to SHAs |
+| **P7 Validation tooling** | `validation/contract`, `simulator`, `loadtest`, `check-live-stack.yml` | `pytest --collect-only` lists every endpoint in the legacy §3.4 table; `k6 inspect` passes |
 | **P8 Runbooks** | `docs/runbooks/cutover.md`, `docs/runbooks/break-glass-rollback.md` | Commands are copy-pasteable with variables only |
 
 ---

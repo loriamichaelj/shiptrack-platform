@@ -26,26 +26,26 @@ legacy after it (`preview_stack`). Neither changes with the weights. Changing th
 
 | Tool | What it does | Where it runs |
 |---|---|---|
-| `validation.yml` | The contract suite (`contract-smoke`, `contract-full`, `contract-ui-parity`) or a k6 baseline against one stack | Actions, plan role, no approval |
-| `cutover-gates.yml` | Judges G2 to G5 over an evidence window and prints a table of numbers | Actions, plan role, no approval |
-| `security-findings.yml` | Inspector findings by scope (modern, legacy, other) and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern | Actions, plan role, no approval |
-| `terraform-apply.yml` | Applies a weight change after a reviewer approves the `dev` gate | Actions, apply role |
-| `rollback-cutover.yml` | Break-glass: all traffic back to legacy now (`break-glass-rollback.md`) | Actions, apply role, `dev` gate |
+| `check-live-stack.yml` | The contract suite (`contract-smoke`, `contract-full`, `contract-ui-parity`) or a k6 baseline against one stack | Actions, plan role, no approval |
+| `check-cutover-gates.yml` | Judges G2 to G5 over an evidence window and prints a table of numbers | Actions, plan role, no approval |
+| `check-security-findings.yml` | Inspector findings by scope (modern, legacy, other) and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern | Actions, plan role, no approval |
+| `apply-terraform.yml` | Applies a weight change after a reviewer approves the `dev` gate | Actions, apply role |
+| `ops-rollback-cutover.yml` | Break-glass: all traffic back to legacy now (`break-glass-rollback.md`) | Actions, apply role, `dev` gate |
 
 ## The gates
 
 | Gate | Criterion | Measured by |
 |---|---|---|
-| G1 Correctness | The contract suite passes against `TARGET=modern` | `validation.yml` `contract-full` |
-| G2 Errors | tg-modern 5xx ratio is at most tg-legacy's plus 0.5 pp | `cutover-gates.yml` |
-| G3 Latency | Per route, from one runner: p95 at most 1.2 times legacy's, except `POST /events`, which is at most legacy's plus 50 ms (ADR-0031) | `validation.yml` `k6-baseline` with target `both`; `cutover-gates.yml` prints the target-group p95 as information |
-| G4 Stability | No SEV1 alarm, no pod restarts from the release | `cutover-gates.yml` |
-| G5 Async health (wave 2 on) | Events queue age under 60 s, dead-letter queues empty | `cutover-gates.yml` with wave 2 |
-| G6 UI build parity (before wave 1) | Both stacks serve identical hashed UI asset names | `validation.yml` `contract-ui-parity` |
+| G1 Correctness | The contract suite passes against `TARGET=modern` | `check-live-stack.yml` `contract-full` |
+| G2 Errors | tg-modern 5xx ratio is at most tg-legacy's plus 0.5 pp | `check-cutover-gates.yml` |
+| G3 Latency | Per route, from one runner: p95 at most 1.2 times legacy's, except `POST /events`, which is at most legacy's plus 50 ms (ADR-0031) | `check-live-stack.yml` `k6-baseline` with target `both`; `check-cutover-gates.yml` prints the target-group p95 as information |
+| G4 Stability | No SEV1 alarm, no pod restarts from the release | `check-cutover-gates.yml` |
+| G5 Async health (wave 2 on) | Events queue age under 60 s, dead-letter queues empty | `check-cutover-gates.yml` with wave 2 |
+| G6 UI build parity (before wave 1) | Both stacks serve identical hashed UI asset names | `check-live-stack.yml` `contract-ui-parity` |
 
 Evidence window: a step is judged once each target group has seen at least `MIN_REQUESTS` requests
 (default 100). A gate with too little traffic says `NO DATA`, which is not a pass: run
-`validation.yml` with `k6-baseline` and target `none` first, so the weighted rules see load.
+`check-live-stack.yml` with `k6-baseline` and target `none` first, so the weighted rules see load.
 
 ## One weight step
 
@@ -55,13 +55,13 @@ Evidence window: a step is judged once each target group has seen at least `MIN_
    (wave 2; `module.ingress.aws_lb_listener.https` when TLS is on), and of
    `module.observability.aws_cloudwatch_dashboard.cutover`, whose weights table is rendered from the
    same variable. Anything else in the plan stops the step.
-2. **Merge and apply.** Merging starts `terraform-apply`, which waits at the `dev` gate. Approve it.
+2. **Merge and apply.** Merging starts `apply-terraform`, which waits at the `dev` gate. Approve it.
    It takes under a minute.
-3. **Load.** Dispatch `validation.yml`: suite `k6-baseline`, target `none`. Then `contract-smoke`
+3. **Load.** Dispatch `check-live-stack.yml`: suite `k6-baseline`, target `none`. Then `contract-smoke`
    against `modern` once.
 4. **Watch.** Let the load run, and watch for SEV1 notifications while it does.
-5. **Judge.** Dispatch `cutover-gates.yml` with a `window_minutes` that covers the load, and the wave. Every row must be
-   PASS (or `run validation.yml` for G1 and G6, `n/a` for G5 before wave 2). `NO DATA` is a stop.
+5. **Judge.** Dispatch `check-cutover-gates.yml` with a `window_minutes` that covers the load, and the wave. Every row must be
+   PASS (or `run check-live-stack.yml` for G1 and G6, `n/a` for G5 before wave 2). `NO DATA` is a stop.
 6. **Record.** Fill in the go/no-go record below and store it with the evidence in modern's
    `docs/migration/wave-N/`, scrubbed of addresses and identifiers.
 7. **Decide.** Next step, hold, or roll back.
@@ -72,10 +72,10 @@ Evidence window: a step is judged once each target group has seen at least `MIN_
 
 Entry: platform applied; modern cluster, add-ons, and release deployed.
 
-1. `validation.yml`: `contract-full` with target `modern`, then `contract-ui-parity` (G6).
-2. `validation.yml`: `k6-baseline` with target `legacy`, then with target `modern`. The two summaries
+1. `check-live-stack.yml`: `contract-full` with target `modern`, then `contract-ui-parity` (G6).
+2. `check-live-stack.yml`: `k6-baseline` with target `legacy`, then with target `modern`. The two summaries
    are the G2 and G3 baseline.
-3. `security-findings.yml`: no fixable CRITICAL or HIGH in modern, which is the `shiptrack/` ECR
+3. `check-security-findings.yml`: no fixable CRITICAL or HIGH in modern, which is the `shiptrack/` ECR
    repository, the nodes of the `shiptrack` EKS cluster, and anything tagged `Stack=modern`. Legacy's
    findings are printed as the baseline and are not gated (its AMI is pinned on purpose, AP-14), and
    so are other teams' resources (ADR-0029).
@@ -96,7 +96,7 @@ sticky, so a browser session stays on its stack.
 | 1c | legacy 0, modern 100 | `-  track   = { legacy = 50, modern = 50 }` / `+  track   = { legacy = 0, modern = 100 }` |
 
 `default` stays `{ legacy = 100, modern = 0 }`. Gates G1 to G4 each step. Rollback: a pull request
-that restores the previous line, or `rollback-cutover.yml` first and the pull request after.
+that restores the previous line, or `ops-rollback-cutover.yml` first and the pull request after.
 
 ### Wave 2: write path
 
@@ -135,7 +135,7 @@ Entry: handoff complete. In order, as in modern design §9.2:
    and its UI stays on the preview port.
 
 To fall back to legacy: suspend the modern CronJob first (`slaScan.suspend=true`, a modern deploy),
-then `legacy-cron.yml restore-sla`, then route with `rollback-cutover.yml`. Restoring legacy's cron
+then `ops-legacy-cron.yml restore-sla`, then route with `ops-rollback-cutover.yml`. Restoring legacy's cron
 while the CronJob is live lets two scanners alert twice (AP-09).
 
 ## Roll back
@@ -143,8 +143,8 @@ while the CronJob is live lets two scanners alert twice (AP-09).
 | Situation | Do |
 |---|---|
 | A gate fails or an alarm fires while a step is being judged, and there is time | Pull request restoring the previous weights; merge; approve the apply |
-| User impact now | `rollback-cutover.yml` (all weighted routing to legacy 100), then the pull request within 24 hours |
-| After wave 3 | Legacy is still running and `rollback-cutover.yml` still works. Suspend modern's CronJob before restoring legacy's SLA cron |
+| User impact now | `ops-rollback-cutover.yml` (all weighted routing to legacy 100), then the pull request within 24 hours |
+| After wave 3 | Legacy is still running and `ops-rollback-cutover.yml` still works. Suspend modern's CronJob before restoring legacy's SLA cron |
 
 ## Alarms
 
@@ -155,13 +155,13 @@ step: roll back first, investigate second.
 
 SEV1. More than 2% of requests to legacy's target group returned 5xx. Legacy errors are not a
 cutover failure by themselves, but they move the G2 baseline, so a step judged while this is firing
-proves nothing. Check the latest legacy deploy (`deploy.yml` in `shiptrack-legacy`) and the legacy
+proves nothing. Check the latest legacy deploy (`deploy-app.yml` in `shiptrack-legacy`) and the legacy
 hosts' health before continuing any step.
 
 ### tg-modern-5xx-ratio
 
 SEV1. More than 2% of requests to modern's target group returned 5xx. During a wave this is G2
-failing: run `rollback-cutover.yml`, then look at modern's latest deploy and its alarms. At weight 0
+failing: run `ops-rollback-cutover.yml`, then look at modern's latest deploy and its alarms. At weight 0
 it can only be your own test traffic.
 
 ### tg-legacy-p99-latency
@@ -224,7 +224,7 @@ Copy into `docs/migration/wave-N/` in `shiptrack-modern` for each step, scrubbed
 - Evidence window: <start> to <end>, with the request count of each target group
 - Load during the window: k6-baseline, target none, run <link>
 - Gates (cutover-gates run <link>): G2 <result>, G3 <result>, G4 <result>, G5 <result or n/a>
-- G1 (validation.yml run <link>) and G6: <result>
+- G1 (check-live-stack.yml run <link>) and G6: <result>
 - Alarms fired during the window: <none | names>
 - Notes: <anything a later reader needs>
 ```

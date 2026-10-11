@@ -1,10 +1,10 @@
-name: rollback-cutover
+name: ops-rollback-cutover
 
 # Break-glass: put all traffic back on legacy now, without a pull request. It rewrites the weights of
 # the ALB's weighted rules and default action to legacy 100, modern 0 through the AWS API, and
 # changes nothing else. Use it when an incident cannot wait for a pull request and an apply.
 #
-# The weights then differ from `var.cutover`, and drift.yml reports it until a pull request sets
+# The weights then differ from `var.cutover`, and check-drift.yml reports it until a pull request sets
 # `cutover` to match: do that within 24 hours (docs/runbooks/break-glass-rollback.md, design R-06).
 #
 # Run it by hand from `dev`. The `dev` environment requires a reviewer, so a person approves each

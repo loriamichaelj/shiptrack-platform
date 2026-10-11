@@ -1,4 +1,4 @@
-name: simulator-ci
+name: ci-simulator
 
 # Checks the carrier event simulator: lint, tests, and that the wheel builds. None of it needs AWS,
 # so it also runs for pull requests from forks.
@@ -7,7 +7,7 @@ on:
   pull_request:
     paths:
       - "validation/simulator/**"
-      - ".github/workflows/simulator-ci.yml"
+      - ".github/workflows/ci-simulator.yml"
 
 permissions:
   contents: read

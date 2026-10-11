@@ -1,12 +1,12 @@
-name: cutover-gates
+name: check-cutover-gates
 
 # Judges the cutover gates G2 to G5 over the last N minutes from CloudWatch, with the read-only plan
 # role, and prints a table of numbers to the run summary. Run it at the end of each soak. G1 (the
-# contract suite) and G6 (UI parity) are run by validation.yml. Nothing is uploaded and no address
+# contract suite) and G6 (UI parity) are run by check-live-stack.yml. Nothing is uploaded and no address
 # appears: request counts, ratios, seconds, and alarm names only.
 #
 # Gates need traffic to compare. At a low weight with no load there may be almost none, and the
-# table then says NO DATA, never a pass: run validation.yml with `k6-baseline` and target `none`
+# table then says NO DATA, never a pass: run check-live-stack.yml with `k6-baseline` and target `none`
 # (weighted routing) during the soak.
 
 on:

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Evaluate the cutover gates G2 to G5 over the last WINDOW_MINUTES from CloudWatch, and print a
-# table of numbers. Run by .github/workflows/cutover-gates.yml with the read-only plan role, so
+# table of numbers. Run by .github/workflows/check-cutover-gates.yml with the read-only plan role, so
 # nobody needs the console or the AWS CLI to judge a soak.
 # Usage: scripts/cutover-gates.sh
 #
-# G1 (the contract suite) and G6 (UI parity) are run by validation.yml. The table says so.
+# G1 (the contract suite) and G6 (UI parity) are run by check-live-stack.yml. The table says so.
 #
 #   G2  tg-modern 5xx ratio <= tg-legacy 5xx ratio + 0.5 percentage points
 #   G3  tg-modern p95 response time <= 1.2 x tg-legacy p95
@@ -94,8 +94,8 @@ add() { # add <gate> <verdict> <criterion> <measured>
   return 0
 }
 
-add "G1 Correctness" "run validation.yml" "contract suite passes with TARGET=modern" "not measured here"
-add "G6 UI parity" "run validation.yml" "ui_parity passes (before wave 1)" "not measured here"
+add "G1 Correctness" "run check-live-stack.yml" "contract suite passes with TARGET=modern" "not measured here"
+add "G6 UI parity" "run check-live-stack.yml" "ui_parity passes (before wave 1)" "not measured here"
 
 # G2
 if [[ "$enough" != yes ]]; then

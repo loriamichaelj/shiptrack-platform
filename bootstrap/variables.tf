@@ -75,7 +75,7 @@ variable "role_prefix" {
 }
 
 variable "seed_role_name" {
-  description = "Name of the manually created role that runs bootstrap-apply.yml."
+  description = "Name of the manually created role that runs apply-bootstrap.yml."
   type        = string
 }
 

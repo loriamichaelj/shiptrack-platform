@@ -7,11 +7,11 @@ secret values is how a rotated password reaches the database.
 
 The database is private, and GitHub-hosted runners cannot reach it. There are two ways to run it:
 
-- **The `db-bootstrap` workflow in `shiptrack-legacy`** (the route used in this account, which has no
+- **The `ops-db-bootstrap` workflow in `shiptrack-legacy`** (the route used in this account, which has no
   CloudShell). It dispatches an SSM document to one legacy host, which fetches this repository's
   `db/bootstrap.sql` at a commit the workflow pins and checks against a SHA-256, reads the three
   secrets itself, and runs the SQL. Nothing secret passes through the workflow. See legacy ADR-0011.
-  Run it after the first legacy `terraform-apply` and before the first deploy.
+  Run it after the first legacy `apply-terraform` and before the first deploy.
 - **An AWS CloudShell VPC environment**, below, where CloudShell is available. No bastion host is
   needed.
 

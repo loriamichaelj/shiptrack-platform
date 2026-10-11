@@ -1,10 +1,10 @@
-name: terraform-pr
+name: ci-terraform
 
 # Checks every pull request that touches Terraform. `lint` needs no AWS access, so it also runs for
 # pull requests from forks. `plan` assumes the plan role, which a fork cannot reach, and posts only
 # resource addresses and actions as a comment (never attribute values). Plan files are never
 # uploaded. bootstrap/ is linted and scanned here but only ever planned and applied by
-# bootstrap-apply.yml.
+# apply-bootstrap.yml.
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ on:
       - "scripts/terraform-ci.sh"
       - ".tflint.hcl"
       - ".checkov.yaml"
-      - ".github/workflows/terraform-pr.yml"
+      - ".github/workflows/ci-terraform.yml"
 
 permissions:
   contents: read
@@ -131,7 +131,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           mask-aws-account-id: true
-      # Mask the preview addresses before any step can print them (see terraform-apply.yml).
+      # Mask the preview addresses before any step can print them (see apply-terraform.yml).
       - name: Mask the preview addresses
         if: steps.env.outputs.present == 'true'
         env:
@@ -151,7 +151,7 @@ jobs:
           TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
           TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
           TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
-          # Must match terraform-apply.yml, or the plan shows the preview listener as a change.
+          # Must match apply-terraform.yml, or the plan shows the preview listener as a change.
           TF_VAR_preview_ingress_cidrs: ${{ secrets.PREVIEW_CIDRS || '[]' }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan

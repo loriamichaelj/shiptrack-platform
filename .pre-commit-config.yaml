@@ -1,4 +1,4 @@
-# Fast local checks before a commit. CI runs the same checks and more (terraform-pr.yml, scrub.yml),
+# Fast local checks before a commit. CI runs the same checks and more (ci-terraform.yml, ci-scrub.yml),
 # so this file is a convenience, not a gate. Install once with: pre-commit install
 # Revisions are commit SHAs; the tag is in the comment.
 repos:
@@ -23,7 +23,7 @@ repos:
         args: ["--config-file", ".checkov.yaml", "--skip-path", "\\.terraform"]
   - repo: local
     hooks:
-      # Same flags as the gate in terraform-pr.yml. Needs trivy on the PATH (brew install trivy).
+      # Same flags as the gate in ci-terraform.yml. Needs trivy on the PATH (brew install trivy).
       - id: trivy-config
         name: Trivy config
         entry: trivy config --severity HIGH,CRITICAL --skip-dirs "**/.terraform" --exit-code 1 .

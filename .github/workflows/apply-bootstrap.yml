@@ -1,4 +1,4 @@
-name: bootstrap-apply
+name: apply-bootstrap
 
 # Applies bootstrap/ (state bucket, permission boundary, and the nine deploy roles) using the
 # manually created seed role. Both jobs run in the `bootstrap` environment, which requires a
