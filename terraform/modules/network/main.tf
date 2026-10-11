@@ -314,7 +314,9 @@ resource "aws_vpc_security_group_ingress_rule" "alb" {
 # The preview listener sends everything to the modern stack, so a person can open its UI next to
 # legacy's without the test-routing headers. It is reachable only from the CIDRs named here.
 resource "aws_vpc_security_group_ingress_rule" "preview" {
-  for_each = toset(var.preview_ingress_cidrs)
+  # Keyed by position, not by address: the plan summary prints resource addresses into public pull
+  # request comments and logs, and the address of a person's connection must not be in one.
+  for_each = { for i, cidr in var.preview_ingress_cidrs : tostring(i) => cidr }
 
   security_group_id = aws_security_group.alb.id
   description       = "Modern preview listener from a named address"
