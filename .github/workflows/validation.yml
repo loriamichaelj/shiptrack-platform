@@ -29,6 +29,11 @@ on:
           - legacy
           - modern
           - none
+      duration:
+        description: "How long the k6 baseline runs, as a k6 duration such as 10m (ignored by the contract suites)"
+        required: false
+        type: string
+        default: "30m"
 
 permissions:
   contents: read
@@ -96,5 +101,6 @@ jobs:
         if: inputs.suite == 'k6-baseline'
         env:
           TARGET: ${{ inputs.target }}
+          DURATION: ${{ inputs.duration }}
         working-directory: validation/loadtest
         run: k6 run baseline.js
