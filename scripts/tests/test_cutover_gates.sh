@@ -98,6 +98,9 @@ run "a pod restart alarm fails G4" 1 "| G4 Stability | FAIL |" "pod-restarts"
 defaults; export FAKE_ALARMS='{"MetricAlarms":[{"AlarmName":"shiptrack-platform-rds-cpu","AlarmDescription":"owner: x | severity: SEV2 | runbook: y"}],"CompositeAlarms":[]}'
 run "a SEV2 alarm alone does not fail G4, and is named" 0 "| G4 Stability | PASS |" "1 SEV2 in ALARM (shiptrack-platform-rds-cpu)"
 
+defaults; export FAKE_ALARMS='{"MetricAlarms":[{"AlarmName":"shiptrack-modern-sla-scan-heartbeat","ActionsEnabled":false,"AlarmDescription":"SEV2: no SLA scan has completed in 15 minutes"},{"AlarmName":"shiptrack-modern-muted-sev1","ActionsEnabled":false,"AlarmDescription":"owner: x | severity: SEV1"}],"CompositeAlarms":[]}'
+run "an alarm with its actions off is counted apart and does not fail G4" 0 "| G4 Stability | PASS |" "0 SEV2 in ALARM; 2 with actions disabled, not counted"
+
 defaults; export WAVE=2
 run "wave 2 judges G5 and passes with a fresh queue and empty DLQs" 0 "| G5 Async health | PASS |"
 
