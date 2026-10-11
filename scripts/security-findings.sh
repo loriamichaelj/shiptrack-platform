@@ -33,9 +33,10 @@ while :; do
   [[ -n "$token" ]] && args+=(--next-token "$token")
   aws "${args[@]}" >"$work/page.json"
   jq -c '[(.findings // [])[] | (.resources[0] // {}) as $r
-          | {severity, fixAvailable, title, resources: [{type: $r.type}],
+          | {severity, fixAvailable, title, resources: [{type: $r.type}], rid: $r.id,
              scope: (if (($r.details.awsEcrContainerImage.repositoryName // "") | startswith("shiptrack/"))
                         or (($r.tags.Project // "") == "shiptrack")
+                        or (($r.tags["eks:cluster-name"] // "") == "shiptrack")
                      then "shiptrack" else "other" end),
              repo: (if (($r.details.awsEcrContainerImage.repositoryName // "") | startswith("shiptrack/"))
                     then $r.details.awsEcrContainerImage.repositoryName else null end)}]' \
@@ -68,13 +69,14 @@ fixable=$(jq '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
   echo "|---|---|"
   jq -r 'group_by(.resources[0].type) | map("| \(.[0].resources[0].type // "unknown") | \(length) |") | .[]' <<<"$findings"
   echo
-  echo "By scope (ShipTrack is an ECR repository named shiptrack/... or a resource tagged Project=shiptrack;"
+  echo "By scope (ShipTrack is an ECR repository named shiptrack/..., a resource tagged Project=shiptrack,"
+  echo "or a node of the shiptrack EKS cluster;"
   echo "anything else in the account is \"other\"):"
   echo
-  echo "| Scope | Resource type | Fixable CRITICAL or HIGH | All active |"
-  echo "|---|---|---|---|"
+  echo "| Scope | Resource type | Distinct resources | Fixable CRITICAL or HIGH | All active |"
+  echo "|---|---|---|---|---|"
   jq -r 'group_by([.scope, .resources[0].type])
-         | map("| \(.[0].scope) | \(.[0].resources[0].type // "unknown") | \([.[] | select(.severity == "CRITICAL" or .severity == "HIGH") | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length) | \(length) |") | .[]' <<<"$findings"
+         | map("| \(.[0].scope) | \(.[0].resources[0].type // "unknown") | \([.[].rid] | unique | length) | \([.[] | select(.severity == "CRITICAL" or .severity == "HIGH") | select(.fixAvailable == "YES" or .fixAvailable == "PARTIAL")] | length) | \(length) |") | .[]' <<<"$findings"
   echo
   echo "Total active: $total. **Fixable CRITICAL or HIGH: $fixable** ($fixable_shiptrack in ShipTrack's own resources)."
   if [[ "$fixable" -gt 0 ]]; then

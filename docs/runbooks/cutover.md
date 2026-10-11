@@ -74,8 +74,8 @@ Entry: platform applied; modern cluster, add-ons, and release deployed.
 2. `validation.yml`: `k6-baseline` with target `legacy`, then with target `modern`. The two summaries
    are the G2 and G3 baseline.
 3. `security-findings.yml`: no fixable CRITICAL or HIGH. The table splits findings into ShipTrack's
-   own resources (an ECR repository named `shiptrack/...`, or a resource tagged `Project=shiptrack`)
-   and the rest of the account, so a finding in another team's image is visible but is not mistaken
+   own resources (an ECR repository named `shiptrack/...`, a resource tagged `Project=shiptrack`, or a
+   node of the `shiptrack` EKS cluster) and the rest of the account, so a finding in another team's image is visible but is not mistaken
    for ShipTrack's.
 4. Confirm the alarms are in `OK` and the `shiptrack-cutover` dashboard shows both target groups.
 
