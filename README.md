@@ -62,7 +62,8 @@ The ALB's address serves legacy: the weighted rules send all traffic to it until
 weights. To open the modern UI beside it without the test-routing headers, set the `PREVIEW_CIDRS`
 repository **secret** to a JSON list of the addresses that may reach it, for example
 `["203.0.113.7/32"]`, and run `terraform-apply`. That adds a listener on port 8080 that forwards
-everything to modern. Then:
+everything to one stack: modern while legacy takes the traffic, and legacy after the cutover
+(`preview_stack`, ADR-0032), so legacy's UI stays reachable beside modern's. Then:
 
 - legacy: `http://<ALB address>/ui/`
 - modern: `http://<ALB address>:8080/ui/`

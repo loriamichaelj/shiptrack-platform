@@ -213,8 +213,9 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# A second address for the modern stack. It is not part of the cutover: it never changes how the
-# weighted rules on the main listener route, and removing it changes nothing for legacy.
+# A second address for one stack, chosen by var.preview_stack. It is not part of the cutover: it
+# never changes how the weighted rules on the main listener route. It goes to modern while legacy
+# takes the traffic, and to legacy once modern does, so legacy's UI stays open (ADR-0026, ADR-0032).
 resource "aws_lb_listener" "preview" {
   #checkov:skip=CKV_AWS_2: plain HTTP, like the main listener without a custom domain (risk R-01)
   #checkov:skip=CKV_AWS_103: no TLS listener exists without a custom domain (risk R-01)
@@ -226,7 +227,7 @@ resource "aws_lb_listener" "preview" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.modern.arn
+    target_group_arn = var.preview_stack == "legacy" ? aws_lb_target_group.legacy.arn : aws_lb_target_group.modern.arn
   }
 }
 

@@ -35,6 +35,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0029 | `findings-gate-covers-modern-only` | Accepted |
 | 0030 | `cutover-steps-gated-by-evidence-not-durations` | Accepted |
 | 0031 | `g3-per-route-with-an-event-route-allowance` | Accepted |
+| 0032 | `legacy-kept-reachable-on-the-preview-port` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -417,3 +418,17 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - The target-group figure from `cutover-gates.yml` is still printed and is information, because it mixes route shares that change as the weights move.
 
 **Consequences:** The allowance is the price of durable event ingestion, written down, instead of a failure that stays open. It is only measured on a short synthetic run, so a regression in the other routes is still caught at 1.2, and a regression in the event route past 50 ms is caught as well. The aggregate can read above 1.2 with every route within its bound. Reducing the gap (a shared SQS client, a regional endpoint) is a performance task and does not block the migration.
+
+## ADR-0032: legacy-kept-reachable-on-the-preview-port
+
+**Status:** Accepted
+
+**Context:** The design ended the migration by scaling legacy to 0, destroying its stack, and removing `tg-legacy` (wave 3, steps 5 and 6). The owner decided that nothing is destroyed and that legacy's address on port 8080 stays. ADR-0026 made the preview listener forward to modern, so that modern's UI could be opened beside legacy's; once modern serves the main address that is the wrong way round.
+
+**Decision:**
+- The preview listener's target is a variable, `preview_stack`, `modern` (the default, ADR-0026) or `legacy`. The dev environment sets `legacy` once modern serves the main address.
+- Legacy keeps its Auto Scaling group, its hosts, `tg-legacy`, and its database access. Nothing is scaled to zero and nothing is destroyed. The preview CIDRs still decide who can reach the port.
+- Modern is still reachable beside it with the test-routing headers on the main address, which the header rules route to modern whatever the weights say.
+- The wave 3 steps that scale legacy to zero and destroy it are not taken.
+
+**Consequences:** Legacy continues to cost what two hosts cost, and its AMI stays pinned (AP-14), so its findings stay as the baseline; they are not gated (ADR-0029). Legacy's cron jobs are removed in wave 3 so that it does not scan or sync. A person who opens legacy's UI on 8080 can still write through it to the shared database: legacy is not read-only. Decommissioning later is the change `desired_capacity = 0` and removing `tg-legacy` and the listener, and it needs its own ADR.

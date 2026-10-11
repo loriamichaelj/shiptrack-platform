@@ -38,3 +38,6 @@ enable_guardduty_runtime = true
 config_recorder_name         = "default"
 config_delivery_channel_name = "default"
 manage_access_analyzer       = false
+
+# Modern serves the main address, so the preview port keeps legacy's UI reachable (ADR-0032).
+preview_stack = "legacy"
