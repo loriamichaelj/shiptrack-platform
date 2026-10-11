@@ -22,9 +22,22 @@ export const MIX = [
   ['ui', 0.05],
 ];
 
+// One `route` tag per request kind, so the summary can say which route is slower on one stack. The
+// request `name` is not used as a sub-metric key because it holds braces and slashes.
+const ROUTE_OF = {
+  'GET /api/v1/track/{tracking_number}': 'track',
+  'POST /api/v1/shipments/{id}/events': 'event',
+  'POST /api/v1/shipments': 'create',
+  'GET /ui/': 'ui_shell',
+  'GET /ui/assets/{file}': 'ui_asset',
+};
+export const ROUTES = ['track', 'event', 'create', 'ui_shell', 'ui_asset'];
+
 export const THRESHOLDS = {
   http_req_failed: ['rate<0.01'],
   http_req_duration: ['p(95)<500'],
+  // Declared so that k6 keeps a sub-metric per route and the summary can print it.
+  ...Object.fromEntries(ROUTES.map((route) => [`http_req_duration{route:${route}}`, ['p(95)<500']])),
   // Routing fall-through is a failure, not noise: every response must come from TARGET.
   'checks{check:stack header matches TARGET}': ['rate>0.99'],
 };
@@ -43,7 +56,7 @@ function headers(extra) {
 
 function params(name, extra) {
   // `name` keeps one metric series per route instead of one per tracking number.
-  return { headers: headers(extra), tags: { name, target: TARGET } };
+  return { headers: headers(extra), tags: { name, target: TARGET, route: ROUTE_OF[name] || 'other' } };
 }
 
 function stackOk(res) {
@@ -159,6 +172,14 @@ export function summarise(data, scenario) {
     `requests      ${m.http_reqs ? m.http_reqs.values.count : 0}`,
     `failed        ${m.http_req_failed ? number(m.http_req_failed.values.rate * 100, 2) : 'n/a'} %`,
     `duration p95  ${m.http_req_duration ? number(m.http_req_duration.values['p(95)'], 1) : 'n/a'} ms`,
+    ...ROUTES.map((route) => {
+      const metric = m[`http_req_duration{route:${route}}`];
+      if (!metric) {
+        return `route ${route.padEnd(9)} no requests`;
+      }
+      const v = metric.values;
+      return `route ${route.padEnd(9)} p50 ${number(v.med, 1)} ms  p95 ${number(v['p(95)'], 1)} ms  max ${number(v.max, 1)} ms`;
+    }),
     '',
   ].join('\n');
   return {
