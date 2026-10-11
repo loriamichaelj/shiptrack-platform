@@ -49,7 +49,7 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `ci-simulator.yml` | pull requests touching the simulator | Lint and tests |
 | `ops-unlock-state.yml` | by hand, `dev` environment | Removes a stale state lock, given its ID. Refuses a lock with another ID or one younger than 30 minutes (ADR-0025) |
 | `check-drift.yml` | nightly, and by hand | Plans `terraform/envs/dev` with the plan role. Changes open or update one issue, "Drift detected: platform/dev", with addresses and actions only; a clean plan closes it (ADR-0027) |
-| `check-live-stack.yml` | by hand | Runs the contract suite (`smoke`, `full`, or `ui_parity`) or a k6 baseline against one stack through the ALB. Uploads nothing |
+| `check-live-stack.yml` | by hand | Runs the contract suite (`smoke`, `full`, or `sla`) or a k6 baseline against one stack through the ALB. Uploads nothing |
 | `ci-validation.yml` | pull requests touching `validation/` or `scripts/` | Lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests |
 | `check-cutover-gates.yml` | by hand | Judges gates G2 to G5 over a soak window from CloudWatch with the plan role and prints a table of numbers (ADR-0028) |
 | `check-security-findings.yml` | by hand | Inspector findings by severity and fix availability, and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). The wave 0 exit criterion |
@@ -137,8 +137,7 @@ test-routing token itself and uploads nothing, because a failure message can con
 | Suite | Marker or script | Notes |
 |---|---|---|
 | `contract-smoke` | `-m smoke` | The 8-test subset that modern's `deploy-app.yml` runs after every deploy |
-| `contract-full` | `-m "not ui_parity"` | Everything that needs one stack |
-| `contract-ui-parity` | `-m ui_parity` | Gate G6; both stacks must be deployed |
+| `contract-full` | `-m "not sla"` | Everything that needs one stack |
 | `k6-baseline` | `loadtest/baseline.js` | 20 rps for 30 minutes against one stack; the summary stays on the runner |
 
 `target` is `legacy`, `modern`, or `none`. The POD tests need a stack pinned with `legacy` or

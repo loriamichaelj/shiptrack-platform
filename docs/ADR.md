@@ -36,6 +36,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0030 | `cutover-steps-gated-by-evidence-not-durations` | Accepted |
 | 0031 | `g3-per-route-with-an-event-route-allowance` | Accepted |
 | 0032 | `legacy-kept-reachable-on-the-preview-port` | Accepted |
+| 0033 | `retire-ui-build-parity-gate` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -432,3 +433,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - The wave 3 steps that scale legacy to zero and destroy it are not taken.
 
 **Consequences:** Legacy continues to cost what two hosts cost, and its AMI stays pinned (AP-14), so its findings stay as the baseline; they are not gated (ADR-0029). Legacy's cron jobs are removed in wave 3 so that it does not scan or sync. A person who opens legacy's UI on 8080 can still write through it to the shared database: legacy is not read-only. Decommissioning later is the change `desired_capacity = 0` and removing `tg-legacy` and the listener, and it needs its own ADR.
+
+## ADR-0033: retire-ui-build-parity-gate
+
+**Status:** Accepted
+
+**Context:** Gate G6 (§7) required both stacks to serve identical hashed UI asset names, with the UI source frozen until wave 2, so that a browser sticky to one stack never loaded a shell from one stack and assets from the other while the weights moved (R-08). The cutover is complete: both rules are at modern 100, legacy serves nothing on the main address, and it is kept as a fallback on the preview port. The owner asked that modern's UI be built out and that legacy's stay as it is.
+
+**Decision:** G6 is retired. The `ui_parity` test, its marker, and the `contract-ui-parity` suite are removed, and the design, runbook, and README no longer list it. The modern UI uses only the endpoints of the frozen contract.
+
+**Consequences:** The two stacks serve different UI builds. Nothing mixes them in normal use: the main address is modern's and the preview port is legacy's, each answering for both page and assets. The one exposure is a rollback of the weights, after which a browser holding modern's cached `index.html` asks legacy for assets that legacy does not have; a reload fixes it. The contract's `ui` checks remain, and assert the shell, its assets, deep links, and the missing-asset 404 on whichever stack is addressed.
