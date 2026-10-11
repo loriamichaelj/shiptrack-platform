@@ -30,7 +30,7 @@ Meridian Freight runs **ShipTrack**, a shipment-tracking application, on EC2. Th
 | Repo | Owns | Lifecycle |
 |---|---|---|
 | **`shiptrack-platform`** (this repo) | Shared, long-lived infrastructure and the **cutover control point** (ALB weights) | Outlives both app stacks |
-| `shiptrack-legacy` | EC2/ASG tarball deployment of ShipTrack v1.x ("before" state) | Decommissioned after Wave 3 |
+| `shiptrack-legacy` | EC2/ASG tarball deployment of ShipTrack v1.x ("before" state) | Out of the traffic path after Wave 3 and kept running as a fallback, reachable on the preview port (ADR-0032); nothing is destroyed |
 | `shiptrack-modern` | EKS/Helm containerized ShipTrack v2.x ("after" state) | Target state |
 
 **Ownership rule:** a resource belongs here if it is long-lived, shared by both stacks, or controls cutover. Everything else belongs to the app repo that consumes it.
