@@ -41,7 +41,6 @@ legacy after it (`preview_stack`). Neither changes with the weights. Changing th
 | G3 Latency | Per route, from one runner: p95 at most 1.2 times legacy's, except `POST /events`, which is at most legacy's plus 50 ms (ADR-0031) | `check-live-stack.yml` `k6-baseline` with target `both`; `check-cutover-gates.yml` prints the target-group p95 as information |
 | G4 Stability | No SEV1 alarm, no pod restarts from the release | `check-cutover-gates.yml` |
 | G5 Async health (wave 2 on) | Events queue age under 60 s, dead-letter queues empty | `check-cutover-gates.yml` with wave 2 |
-| G6 UI build parity (before wave 1) | Both stacks serve identical hashed UI asset names | `check-live-stack.yml` `contract-ui-parity` |
 
 Evidence window: a step is judged once each target group has seen at least `MIN_REQUESTS` requests
 (default 100). A gate with too little traffic says `NO DATA`, which is not a pass: run
@@ -61,7 +60,7 @@ Evidence window: a step is judged once each target group has seen at least `MIN_
    against `modern` once.
 4. **Watch.** Let the load run, and watch for SEV1 notifications while it does.
 5. **Judge.** Dispatch `check-cutover-gates.yml` with a `window_minutes` that covers the load, and the wave. Every row must be
-   PASS (or `run check-live-stack.yml` for G1 and G6, `n/a` for G5 before wave 2). `NO DATA` is a stop.
+   PASS (or `run check-live-stack.yml` for G1, `n/a` for G5 before wave 2). `NO DATA` is a stop.
 6. **Record.** Fill in the go/no-go record below and store it with the evidence in modern's
    `docs/migration/wave-N/`, scrubbed of addresses and identifiers.
 7. **Decide.** Next step, hold, or roll back.
@@ -72,7 +71,7 @@ Evidence window: a step is judged once each target group has seen at least `MIN_
 
 Entry: platform applied; modern cluster, add-ons, and release deployed.
 
-1. `check-live-stack.yml`: `contract-full` with target `modern`, then `contract-ui-parity` (G6).
+1. `check-live-stack.yml`: `contract-full` with target `modern`.
 2. `check-live-stack.yml`: `k6-baseline` with target `legacy`, then with target `modern`. The two summaries
    are the G2 and G3 baseline.
 3. `check-security-findings.yml`: no fixable CRITICAL or HIGH in modern, which is the `shiptrack/` ECR
@@ -81,12 +80,12 @@ Entry: platform applied; modern cluster, add-ons, and release deployed.
    so are other teams' resources (ADR-0029).
 4. Confirm the alarms are in `OK` and the `shiptrack-cutover` dashboard shows both target groups.
 
-Exit: contract green, k6 thresholds met (`http_req_failed < 1%`, `p(95) < 500 ms`), G6 passed, no
+Exit: contract green, k6 thresholds met (`http_req_failed < 1%`, `p(95) < 500 ms`), no
 fixable CRITICAL or HIGH in modern, and the evidence stored in `docs/migration/wave-0/`. Rollback: none needed.
 
 ### Wave 1: read path and UI
 
-Entry: wave 0 exit, including G6. Moves `/api/v1/track/*` and `/ui/*` together. The UI rule is
+Entry: wave 0 exit. Moves `/api/v1/track/*` and `/ui/*` together. The UI rule is
 sticky, so a browser session stays on its stack.
 
 | Step | `track` | PR diff |
@@ -224,7 +223,7 @@ Copy into `docs/migration/wave-N/` in `shiptrack-modern` for each step, scrubbed
 - Evidence window: <start> to <end>, with the request count of each target group
 - Load during the window: k6-baseline, target none, run <link>
 - Gates (cutover-gates run <link>): G2 <result>, G3 <result>, G4 <result>, G5 <result or n/a>
-- G1 (check-live-stack.yml run <link>) and G6: <result>
+- G1 (check-live-stack.yml run <link>): <result>
 - Alarms fired during the window: <none | names>
 - Notes: <anything a later reader needs>
 ```

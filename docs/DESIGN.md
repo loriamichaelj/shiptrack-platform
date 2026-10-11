@@ -393,7 +393,7 @@ variable "cutover" {
 - **Test-routing token:** Terraform generates a 32-character alphanumeric `random_password` and stores it in Secrets Manager `shiptrack/dev/test-routing-token` (KMS `shiptrack-secrets`). The value necessarily appears in the listener-rule configuration and therefore in platform state. It is a low-sensitivity routing selector, not an auth credential (risk R-04). Rotate by replacing the `random_password` resource.
 - **Fall-through detection:** both stacks return the response header `X-ShipTrack-Stack: legacy|modern`. The contract suite fails when it doesn't match `TARGET`, so a missing or wrong token is caught instead of silently testing the other stack.
 - Group-level stickiness is **off** on the API rules: modern is stateless, and stickiness would skew canary statistics.
-- Group-level stickiness is **on** for the UI rule (P90). A browser loads `index.html` and then the hashed JS/CSS assets in separate requests. Without stickiness, the HTML could come from one stack and the assets from the other; if the two builds differ, the assets 404 and the page breaks. Stickiness plus UI build parity (gate G6) prevents this.
+- Group-level stickiness is **on** for the UI rule (P90). A browser loads `index.html` and then the hashed JS/CSS assets in separate requests. Without stickiness, the HTML could come from one stack and the assets from the other; if the two builds differ, the assets 404 and the page breaks. Stickiness keeps a browser's page and assets on one stack. The two stacks now serve different UI builds (ADR-0033), so a rollback can leave a browser with a cached shell whose assets the other stack does not have; a reload fixes it.
 - The UI rule and the track API rule share `var.cutover.track`, so the UI and its only API move together in Wave 1.
 - Optional `enable_waf` (default `false`): AWS WAF web ACL with `AWSManagedRulesCommonRuleSet`, `AWSManagedRulesKnownBadInputsRuleSet`, and a rate-based rule.
 
@@ -506,7 +506,7 @@ These tools own the **shared definition of correct** for both stacks.
   - `GET /ui/` returns 200 `text/html` containing `<div id="root">`, with `Cache-Control: no-cache`.
   - Every `/ui/assets/*` URL referenced by that HTML returns 200 from the **same** target, with `Cache-Control: public, max-age=31536000, immutable`.
   - Deep link `GET /ui/track/MF0000000000` returns the same HTML shell (SPA fallback), not 404.
-- **UI build parity** (marker `ui_parity`; run only when both stacks are deployed): fetch `/ui/` with `TARGET=legacy` and with `TARGET=modern` and assert the referenced asset filenames are identical. This is cutover gate G6. Both stacks must build the UI with the exact Node version in `web/.nvmrc`.
+- The UI is not compared across stacks. Modern's UI is its own (ADR-0033), so the contract asserts only what each stack serves.
 - Markers:
   - `smoke`: fast post-deploy subset (creates at most one `ZZTEST` shipment)
   - `full`: everything
@@ -579,7 +579,6 @@ All three repositories are public.
 | G3 Latency | Per route, from one runner (`k6-baseline` with `TARGET=both`): p95 ≤ 1.2 × legacy's for every route except `POST /api/v1/shipments/{id}/events`, whose p95 is ≤ legacy's + 50 ms (ADR-0031). The target-group p95 that `check-cutover-gates.yml` prints is reported, and is not the criterion |
 | G4 Stability | No SEV1 alarm in the evidence window; no pod restarts attributable to the release |
 | G5 Async health (Wave 2+) | Events queue age < 60 s, DLQ = 0 |
-| G6 UI build parity (before Wave 1) | `ui_parity` check passes: both stacks serve identical hashed UI asset filenames |
 | Evidence window | A weight step is judged over a window in which each target group saw at least `MIN_REQUESTS` requests (default 100). A gate without that much traffic is `NO DATA`, never a pass |
 
 Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui/*` together). Wave 2 `default` 10 → 25 → 50 → 100.
@@ -646,7 +645,7 @@ Platform optimization candidates for the final analysis: **O-P1** (NAT vs endpoi
 | R-05 | Single-AZ RDS | `multi_az` toggle; RTO/RPO documented in README |
 | R-06 | Break-glass changes cause Terraform drift | Nightly drift detection + 24 h reconcile rule |
 | R-07 | Plan roles have broad read (`ReadOnlyAccess`) | Accepted; enterprise would scope via SCP/session policies |
-| R-08 | Mixed UI builds across stacks during weighted routing | P90 group stickiness + gate G6 parity + UI source freeze until Wave 2 completes. Long-term fix: serve the UI from S3 + CloudFront (roadmap) |
+| R-08 | Mixed UI builds across stacks during weighted routing | P90 group stickiness. The UIs of the two stacks are no longer held identical (ADR-0033): a rollback can leave a cached shell without its assets, and a reload fixes it. Long-term fix: serve the UI from S3 + CloudFront (roadmap) |
 | R-09 | The platform plan role can read the DB secrets and is assumable by any `pull_request` run in the repo, and the workflow file comes from the PR branch | The repos are public: fork PRs receive no OIDC token, and only collaborators can push branches; require approval for workflows from outside collaborators; branch protection and `CODEOWNERS` on `dev` and `.github/`. Enterprise: keep secret-bearing resources in a separate state, or plan from `dev` only. |
 | R-10 | The seed role has `AdministratorAccess` and is created by hand | Trust pinned to one repo and the protected `bootstrap` environment (required reviewers); used only by `apply-bootstrap.yml`; narrowing or retirement tracked here |
 | R-11 | Public repos disclose the architecture, and logs or evidence can leak identifiers | §6.12 rules, masking, and the scrub check; no security control depends on secrecy of the design |
@@ -665,7 +664,7 @@ Platform optimization candidates for the final analysis: **O-P1** (NAT vs endpoi
 8. The `shiptrack-cutover` dashboard renders all rows; every alarm has owner, severity, and runbook in its description.
 9. The contract suite, simulator ledger verification, and k6 baseline all run against legacy and produce result files.
 10. The drift workflow detects a manual listener-rule change.
-11. `/ui/` loads through the ALB for both targets, deep links survive a refresh, and the `ui_parity` check passes when both stacks run the same UI source.
+11. `/ui/` loads through the ALB for both targets, and deep links survive a refresh.
 12. The §6.12 scrub check passes on all three repositories.
 
 ---
