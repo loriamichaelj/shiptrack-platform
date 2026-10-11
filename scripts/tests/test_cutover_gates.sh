@@ -81,7 +81,7 @@ defaults; export FAKE_M_5XX=30
 run "a modern 5xx ratio well above legacy fails G2" 1 "| G2 Errors | FAIL |" "legacy 0.20%, modern 3.00%"
 
 defaults; export FAKE_M_P95=0.300
-run "a modern p95 above 1.2 x legacy fails G3" 1 "| G3 Latency | FAIL |"
+run "a modern p95 above 1.2 x legacy fails G3, in milliseconds" 1 "| G3 Latency | FAIL |" "legacy 200.0 ms, modern 300.0 ms"
 
 defaults; export FAKE_M_P95=0.240
 run "a modern p95 exactly 1.2 x legacy passes G3" 0 "| G3 Latency | PASS |"
@@ -96,7 +96,7 @@ defaults; export FAKE_ALARMS='{"MetricAlarms":[{"AlarmName":"shiptrack-modern-po
 run "a pod restart alarm fails G4" 1 "| G4 Stability | FAIL |" "pod-restarts"
 
 defaults; export FAKE_ALARMS='{"MetricAlarms":[{"AlarmName":"shiptrack-platform-rds-cpu","AlarmDescription":"owner: x | severity: SEV2 | runbook: y"}],"CompositeAlarms":[]}'
-run "a SEV2 alarm alone does not fail G4" 0 "| G4 Stability | PASS |" "1 SEV2 in ALARM"
+run "a SEV2 alarm alone does not fail G4, and is named" 0 "| G4 Stability | PASS |" "1 SEV2 in ALARM (shiptrack-platform-rds-cpu)"
 
 defaults; export WAVE=2
 run "wave 2 judges G5 and passes with a fresh queue and empty DLQs" 0 "| G5 Async health | PASS |"
