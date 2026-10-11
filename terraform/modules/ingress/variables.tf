@@ -65,6 +65,18 @@ variable "cutover" {
   }
 }
 
+variable "preview_enabled" {
+  description = "Add a listener on var.preview_port that forwards everything to the modern target group, outside the cutover weights, so its UI can be opened next to legacy's. The ALB security group decides who can reach it."
+  type        = bool
+  default     = false
+}
+
+variable "preview_port" {
+  description = "Port of the modern preview listener."
+  type        = number
+  default     = 8080
+}
+
 variable "ui_stickiness_seconds" {
   description = "How long a browser stays with one stack for the UI rule, so the page and its assets come from the same build."
   type        = number

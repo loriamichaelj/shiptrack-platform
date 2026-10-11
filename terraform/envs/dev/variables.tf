@@ -59,6 +59,18 @@ variable "allowed_ingress_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "preview_ingress_cidrs" {
+  description = "CIDRs allowed to open the modern preview listener, a second address that goes straight to modern. Empty creates no listener. Set the PREVIEW_CIDRS repository variable, a JSON list such as [\"203.0.113.7/32\"]; it is not committed, because it names a person's address."
+  type        = list(string)
+  default     = []
+}
+
+variable "preview_port" {
+  description = "Port of the modern preview listener."
+  type        = number
+  default     = 8080
+}
+
 variable "enable_tls" {
   description = "Open port 443 on the ALB security group."
   type        = bool
