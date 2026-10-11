@@ -52,7 +52,9 @@ Evidence window: a step is judged once each target group has seen at least `MIN_
 1. **Pull request.** Change only the weights in `terraform/envs/dev/terraform.tfvars`. The plan
    comment must show only in-place updates of `module.ingress.aws_lb_listener_rule.ui` and
    `module.ingress.aws_lb_listener_rule.track` (wave 1), or of `module.ingress.aws_lb_listener.http`
-   (wave 2; `module.ingress.aws_lb_listener.https` when TLS is on). Anything else in the plan stops the step.
+   (wave 2; `module.ingress.aws_lb_listener.https` when TLS is on), and of
+   `module.observability.aws_cloudwatch_dashboard.cutover`, whose weights table is rendered from the
+   same variable. Anything else in the plan stops the step.
 2. **Merge and apply.** Merging starts `terraform-apply`, which waits at the `dev` gate. Approve it.
    It takes under a minute.
 3. **Load.** Dispatch `validation.yml`: suite `k6-baseline`, target `none`. Then `contract-smoke`
