@@ -29,6 +29,7 @@ on:
           - legacy
           - modern
           - none
+          - both
       duration:
         description: "How long the k6 baseline runs, as a k6 duration such as 10m (ignored by the contract suites)"
         required: false
