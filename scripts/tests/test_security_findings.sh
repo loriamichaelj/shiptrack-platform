@@ -73,6 +73,19 @@ echo '{"findings":[]}' >"$FAKE_PAGE1"
 jq -n '{Findings:[{Title:"S3 buckets should have TLS enforced",Severity:{Label:"HIGH"}},{Title:"S3 buckets should have TLS enforced",Severity:{Label:"HIGH"}}]}' >"$FAKE_HUB"
 run "reports Security Hub findings by control title without gating" 0 "S3 buckets should have TLS enforced | 2 |"
 
+# a page far larger than a command line can carry: 1500 findings of about 2 KB, about 3 MB. Linux
+# refuses one argument over 128 KB and macOS refuses over about 1 MB in total, so this fails on both
+# if a page is ever passed on a command line.
+python3 -I - "$FAKE_PAGE1" <<'PY'
+import json, sys
+pad = "x" * 2000
+findings = [{"severity": "LOW", "fixAvailable": "NO", "title": f"CVE-2025-{i:04d} - pkg",
+             "resources": [{"type": "AWS_ECR_CONTAINER_IMAGE"}], "packageVulnerabilityDetails": {"pad": pad}}
+            for i in range(1500)]
+json.dump({"findings": findings}, open(sys.argv[1], "w"))
+PY
+run "handles a page too large for a command line" 0 "Total active: 1500." "Fixable CRITICAL or HIGH: 0"
+
 # an unreadable Security Hub is said, not shown as empty
 rm -f "$FAKE_HUB"
 run "an unreadable Security Hub is reported as unreadable, not as none" 0 "could not be read with this role"
