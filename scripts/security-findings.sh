@@ -20,18 +20,26 @@ set -euo pipefail
 account=$(aws sts get-caller-identity --query Account --output text)
 echo "::add-mask::$account"
 
-# All active Inspector findings, following the pagination token.
-findings='[]'
+# All active Inspector findings, following the pagination token. A page is large (a finding carries
+# its whole package and remediation detail), so nothing here passes JSON on a command line, which
+# the kernel limits; each page is cut down to the fields used and appended through files.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+echo '[]' >"$work/all.json"
 token=""
 while :; do
   args=(inspector2 list-findings --max-results 100
         --filter-criteria '{"findingStatus":[{"comparison":"EQUALS","value":"ACTIVE"}]}' --output json)
   [[ -n "$token" ]] && args+=(--next-token "$token")
-  page=$(aws "${args[@]}")
-  findings=$(jq -c --argjson page "$page" '. + ($page.findings // [])' <<<"$findings")
-  token=$(jq -r '.nextToken // empty' <<<"$page")
+  aws "${args[@]}" >"$work/page.json"
+  jq -c '[(.findings // [])[] | {severity, fixAvailable, title, resources: [(.resources[0] // {}) | {type}]}]' \
+    "$work/page.json" >"$work/slim.json"
+  jq -sc '.[0] + .[1]' "$work/all.json" "$work/slim.json" >"$work/next.json"
+  mv "$work/next.json" "$work/all.json"
+  token=$(jq -r '.nextToken // empty' "$work/page.json")
   [[ -n "$token" ]] || break
 done
+findings=$(cat "$work/all.json")
 
 total=$(jq 'length' <<<"$findings")
 fixable=$(jq '[.[] | select(.severity == "CRITICAL" or .severity == "HIGH")
