@@ -547,6 +547,8 @@ These tools own the **shared definition of correct** for both stacks.
   `bootstrap/` gets the same lint and scan steps but is never planned here; it is planned and applied only by `bootstrap-apply.yml` (§6.1).
 - **`terraform-apply.yml`** (push to `dev`): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
 - **`drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
+- **`rollback-cutover.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Break-glass: legacy = 100, modern = 0 on every weighted rule and the default action, without a pull request (ADR-0028).
+- **`cutover-gates.yml`** and **`security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over a soak window from CloudWatch; the second summarises Inspector and Security Hub findings and fails on a fixable CRITICAL or HIGH. Both print numbers and titles only (ADR-0028).
 - **`unlock-state.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Removes a stale state lock given its ID, and refuses a lock with another ID or one younger than 30 minutes (ADR-0025).
 - Every workflow that plans or applies `terraform/envs/dev` passes the preview CIDR secret and registers each address with `add-mask` before any step can print it (ADR-0026).
 - All workflows: `permissions: { id-token: write, contents: read, pull-requests: write }` (minimum per job). No long-lived AWS keys exist anywhere.
@@ -583,8 +585,8 @@ All three repositories are public.
 Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui/*` together). Wave 2 `default` 10 → 25 → 50 → 100.
 
 **`docs/runbooks/break-glass-rollback.md`**: use when an incident cannot wait for PR review.
-1. Exact `aws elbv2 describe-rules` / `modify-rule` / `modify-listener` commands to force legacy = 100, modern = 0 for both the track rule and the default action, run by an authorized human with their **own admin role** (listed in `var.breakglass_principal_arns` and the README). Pipeline roles trust GitHub OIDC only and cannot be assumed by humans, by design.
-2. Verification commands.
+1. `rollback-cutover.yml` forces legacy = 100, modern = 0 for the weighted rules and the default action through `elbv2 modify-rule` and `modify-listener`. It runs with the apply role behind the `dev` environment's reviewer, so the person who approves a deploy can roll back without the AWS CLI. Pipeline roles trust GitHub OIDC only and cannot be assumed by humans, by design (ADR-0028). `scripts/rollback-cutover.sh` is the same code for an administrator with credentials.
+2. Verification: the run's summary lists the weights before and after and ends by stating that all weighted routing is legacy 100, modern 0.
 3. **Within 24 h**, open a PR setting `var.cutover` to match; `drift.yml` will flag the drift until this is done.
 4. Incident record template.
 

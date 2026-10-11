@@ -93,3 +93,9 @@ jobs:
         run: scripts/tests/test_terraform_ci.sh
       - name: Test force-unlock.sh against fake aws and terraform
         run: scripts/tests/test_force_unlock.sh
+      - name: Test rollback-cutover.sh against a fake ALB
+        run: scripts/tests/test_rollback_cutover.sh
+      - name: Test cutover-gates.sh against fake CloudWatch
+        run: scripts/tests/test_cutover_gates.sh
+      - name: Test security-findings.sh against fake Inspector and Security Hub
+        run: scripts/tests/test_security_findings.sh

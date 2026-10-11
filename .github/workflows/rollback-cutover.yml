@@ -1,0 +1,70 @@
+name: rollback-cutover
+
+# Break-glass: put all traffic back on legacy now, without a pull request. It rewrites the weights of
+# the ALB's weighted rules and default action to legacy 100, modern 0 through the AWS API, and
+# changes nothing else. Use it when an incident cannot wait for a pull request and an apply.
+#
+# The weights then differ from `var.cutover`, and drift.yml reports it until a pull request sets
+# `cutover` to match: do that within 24 hours (docs/runbooks/break-glass-rollback.md, design R-06).
+#
+# Run it by hand from `dev`. The `dev` environment requires a reviewer, so a person approves each
+# run. It shares terraform-apply's concurrency group, so it never races an apply.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why, in one line. It appears on this public run page: no addresses or identifiers"
+        required: true
+        type: string
+      dry_run:
+        description: "Show what would change and change nothing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tf-platform-dev
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Put all traffic back on legacy
+        # `shell: bash` runs with pipefail, so a failing script is not hidden by the tee below.
+        shell: bash
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          {
+            echo "### Rollback to legacy"
+            echo
+            echo "Reason: ${REASON}"
+            echo
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+          scripts/rollback-cutover.sh | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo '```'
+            echo
+            echo "Reconcile within 24 hours: open a pull request that sets \`cutover\` in \`terraform/envs/dev/terraform.tfvars\` to match, or the nightly drift check keeps reporting it."
+          } >>"$GITHUB_STEP_SUMMARY"

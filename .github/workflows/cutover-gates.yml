@@ -1,0 +1,64 @@
+name: cutover-gates
+
+# Judges the cutover gates G2 to G5 over the last N minutes from CloudWatch, with the read-only plan
+# role, and prints a table of numbers to the run summary. Run it at the end of each soak. G1 (the
+# contract suite) and G6 (UI parity) are run by validation.yml. Nothing is uploaded and no address
+# appears: request counts, ratios, seconds, and alarm names only.
+#
+# Gates need traffic to compare. At a low weight with no load there may be almost none, and the
+# table then says NO DATA, never a pass: run validation.yml with `k6-baseline` and target `none`
+# (weighted routing) during the soak.
+
+on:
+  workflow_dispatch:
+    inputs:
+      window_minutes:
+        description: "The soak window to judge, in minutes (30 for each weight step)"
+        required: true
+        type: string
+        default: "30"
+      wave:
+        description: "Which wave: G5 (the queues) is judged from wave 2"
+        required: true
+        type: choice
+        default: "1"
+        options:
+          - "1"
+          - "2"
+      min_requests:
+        description: "Fewest requests each target group must have seen for G2 and G3 to be judged"
+        required: false
+        type: string
+        default: "100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cutover-gates
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    # The plan role trusts this repository's `dev` branch, not other refs.
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Judge the gates
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          WINDOW_MINUTES: ${{ inputs.window_minutes }}
+          WAVE: ${{ inputs.wave }}
+          MIN_REQUESTS: ${{ inputs.min_requests }}
+        run: scripts/cutover-gates.sh
