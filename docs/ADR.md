@@ -31,6 +31,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0025 | `state-lock-recovery-workflow` | Accepted |
 | 0026 | `modern-preview-listener` | Accepted |
 | 0027 | `validation-tooling-and-the-nightly-drift-check` | Accepted |
+| 0028 | `cutover-controls-as-workflows` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -359,4 +360,19 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - The k6 summary JSON holds metrics only, with no URLs or headers; routes are tagged by name, not by address.
 
 **Consequences:** The UI checks cannot be run against the bare application process, because nginx serves `/ui/` in legacy; they run against a deployed stack. The k6 baseline against the bare application shows its UI iterations as failures for the same reason. Any new workflow that plans `terraform/envs/dev` has to pass the preview secret too.
+
+## ADR-0028: cutover-controls-as-workflows
+
+**Status:** Accepted
+
+**Context:** The design's break-glass rollback (§7) is a human with their own admin role running `aws elbv2` commands from a list in `var.breakglass_principal_arns`. That variable was never built, and the person who runs this project has no AWS CLI access: the pipeline roles are assumable only by GitHub OIDC, by design. The only rollback left was a pull request, review, and apply, which is the wrong speed for an incident. Judging the gates (G2 to G5) and the wave 0 exit criterion on Inspector had the same problem: the console and the CLI are not available, and reading them out of a public log must not print an identifier.
+
+**Decision:**
+- **`rollback-cutover.yml`** runs `scripts/rollback-cutover.sh` with the apply role behind the `dev` environment's reviewer. It rewrites only weights, only on actions that forward to both target groups, keeps stickiness, leaves the header rules and the preview listener alone, is idempotent, and verifies the result. `drift.yml` reports the difference from `var.cutover` until a pull request reconciles it within 24 hours (design R-06).
+- **`cutover-gates.yml`** runs `scripts/cutover-gates.sh` with the read-only plan role and prints a table: G2 and G3 from `RequestCount`, `HTTPCode_Target_5XX_Count`, and `TargetResponseTime` p95 on each target group, G4 from the alarms in `ALARM`, and G5 from the events queue and the dead-letter queues. A gate without at least `MIN_REQUESTS` on each target group is `NO DATA`, never a pass. G1 and G6 stay in `validation.yml`.
+- **`security-findings.yml`** runs `scripts/security-findings.sh` with the plan role: Inspector findings by severity and fix availability, failing on a fixable CRITICAL or HIGH, and Security Hub CRITICAL and HIGH by control title. It says so when Security Hub cannot be read, instead of showing none.
+- All three print counts, ratios, seconds, alarm names, and public finding titles, and no ARN, account ID, resource identifier, or address.
+- `docs/runbooks/cutover.md` holds the wave procedures with the exact `tfvars` diff per step and one section per alarm, because every alarm description already links to `cutover.md#<alarm>`; `docs/runbooks/break-glass-rollback.md` holds the rollback.
+
+**Consequences:** A rollback is one workflow run and one approval, available to whoever can approve a deploy, and it works with no AWS CLI. It is a second path that changes the ALB outside Terraform, which is the point of break-glass, so the nightly drift check is what keeps it honest; the 24 hour reconcile rule is therefore a requirement and not a courtesy. The apply role can do this because it holds `PowerUserAccess`; the same call would be refused to the plan role. The gates script reads CloudWatch aggregates over one window: its p95 is the larger of the window's data points, which can be stricter than a single p95 across the whole window, and with little traffic it says `NO DATA`. Nothing here lifts the point of no return at wave 3 step 4.
 

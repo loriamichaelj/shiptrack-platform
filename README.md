@@ -52,6 +52,9 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `drift.yml` | nightly, and by hand | Plans `terraform/envs/dev` with the plan role. Changes open or update one issue, "Drift detected: platform/dev", with addresses and actions only; a clean plan closes it (ADR-0027) |
 | `validation.yml` | by hand | Runs the contract suite (`smoke`, `full`, or `ui_parity`) or a k6 baseline against one stack through the ALB. Uploads nothing |
 | `validation-ci.yml` | pull requests touching `validation/` or `scripts/` | Lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests |
+| `cutover-gates.yml` | by hand | Judges gates G2 to G5 over a soak window from CloudWatch with the plan role and prints a table of numbers (ADR-0028) |
+| `security-findings.yml` | by hand | Inspector findings by severity and fix availability, and Security Hub CRITICAL and HIGH; fails on a fixable CRITICAL or HIGH. The wave 0 exit criterion |
+| `rollback-cutover.yml` | by hand, `dev` environment | Break-glass: all weighted routing back to legacy 100, modern 0, without a pull request. See `docs/runbooks/break-glass-rollback.md` |
 
 ## Opening both UIs side by side
 
@@ -83,7 +86,7 @@ listener is outside the cutover weights (ADR-0026). Delete the secret and apply 
 | P4 Security services | Done and applied. Config is adopted and recording, and the Inspector enabler and ECR scanning configuration are created (ADR-0022) |
 | P6b Drift and validation workflows | On `dev`: `drift.yml`, `validation.yml`, `validation-ci.yml` (ADR-0027). Not yet run live |
 | P7 Validation tooling | On `dev`: the simulator, which has seeded the legacy stack, the contract suite, and the k6 scenarios. The contract suite is what modern's `deploy.yml` runs as its smoke test |
-| P8 Runbooks | Not started; written after the builds are complete |
+| P8 Runbooks | `docs/runbooks/cutover.md` and `docs/runbooks/break-glass-rollback.md` are written. The wave 2 section depends on legacy L5 and L6 tooling that is not built yet |
 
 ## Local checks
 

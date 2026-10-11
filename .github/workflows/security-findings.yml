@@ -1,0 +1,38 @@
+name: security-findings
+
+# Summarises the account's active Inspector findings and the CRITICAL and HIGH Security Hub
+# findings as counts and finding titles, with the read-only plan role. It fails when Inspector has
+# a fixable CRITICAL or HIGH finding: that is the wave 0 exit criterion. Nothing is uploaded, and
+# no resource ARN, image or instance identifier, account ID, or address is printed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-findings
+  cancel-in-progress: false
+
+jobs:
+  findings:
+    # The plan role trusts this repository's `dev` branch, not other refs.
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Summarise the findings
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: scripts/security-findings.sh
