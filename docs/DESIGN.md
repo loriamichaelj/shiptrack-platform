@@ -576,7 +576,7 @@ All three repositories are public.
 |---|---|
 | G1 Correctness | Contract suite passes against `TARGET=modern` |
 | G2 Errors | tg-modern 5xx ratio ≤ tg-legacy 5xx ratio + 0.5 pp |
-| G3 Latency | tg-modern p95 ≤ 1.2 × tg-legacy p95 |
+| G3 Latency | Per route, from one runner (`k6-baseline` with `TARGET=both`): p95 ≤ 1.2 × legacy's for every route except `POST /api/v1/shipments/{id}/events`, whose p95 is ≤ legacy's + 50 ms (ADR-0031). The target-group p95 that `cutover-gates.yml` prints is reported, and is not the criterion |
 | G4 Stability | No SEV1 alarm in the evidence window; no pod restarts attributable to the release |
 | G5 Async health (Wave 2+) | Events queue age < 60 s, DLQ = 0 |
 | G6 UI build parity (before Wave 1) | `ui_parity` check passes: both stacks serve identical hashed UI asset filenames |
