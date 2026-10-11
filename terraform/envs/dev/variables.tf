@@ -66,9 +66,15 @@ variable "preview_ingress_cidrs" {
 }
 
 variable "preview_port" {
-  description = "Port of the modern preview listener."
+  description = "Port of the preview listener."
   type        = number
   default     = 8080
+}
+
+variable "preview_stack" {
+  description = "Which stack the preview listener goes to: modern while legacy takes the traffic, legacy once modern serves the main address (ADR-0032)."
+  type        = string
+  default     = "modern"
 }
 
 variable "enable_tls" {

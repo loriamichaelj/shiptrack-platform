@@ -348,7 +348,7 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
 **Listeners**
 - If `var.domain_name` is set: an ACM certificate (DNS-validated in the existing Route 53 hosted zone, looked up by data source), an HTTPS:443 listener with TLS policy `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` (the current console default: TLS 1.3/1.2 with hybrid post-quantum key exchange), and HTTP:80 → 301 redirect to HTTPS.
 - Otherwise: HTTP:80 only (risk R-01). All rules below attach to whichever listener serves traffic.
-- Optional preview listener (ADR-0026): when `preview_ingress_cidrs` is non-empty, HTTP on `preview_port` (default 8080) forwards everything to `tg-modern`, outside the cutover weights, and the ALB security group opens that port only to those CIDRs. The CIDRs come from a repository secret, never a committed value, and `0.0.0.0/0` is refused.
+- Optional preview listener (ADR-0026): when `preview_ingress_cidrs` is non-empty, HTTP on `preview_port` (default 8080) forwards everything to one stack, outside the cutover weights: `tg-modern` while legacy takes the traffic, `tg-legacy` once modern serves the main address (`preview_stack`, ADR-0032). The ALB security group opens that port only to those CIDRs. The CIDRs come from a repository secret, never a committed value, and `0.0.0.0/0` is refused.
 
 **Target groups**
 

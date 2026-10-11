@@ -58,6 +58,7 @@ module "ingress" {
   ui_stickiness_seconds = var.ui_stickiness_seconds
   preview_enabled       = length(var.preview_ingress_cidrs) > 0
   preview_port          = var.preview_port
+  preview_stack         = var.preview_stack
   domain_name           = var.domain_name
   hosted_zone_name      = var.hosted_zone_name
   enable_waf            = var.enable_waf

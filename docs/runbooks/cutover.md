@@ -19,8 +19,8 @@ cutover = {
 ```
 
 Header rules (`X-ShipTrack-Target` with the test token) send a request to one stack whatever the
-weights say, and the preview listener on port 8080 always goes to modern. Neither changes with the
-weights. Changing the weights **is** the cutover, so each change is a pull request.
+weights say, and the preview listener on port 8080 always goes to one stack, modern until the cutover and
+legacy after it (`preview_stack`). Neither changes with the weights. Changing the weights **is** the cutover, so each change is a pull request.
 
 ## Tools
 

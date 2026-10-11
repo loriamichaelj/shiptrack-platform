@@ -81,6 +81,33 @@ run "the_preview_listener_forwards_everything_to_modern" {
   }
 }
 
+run "the_preview_listener_can_keep_legacy_reachable" {
+  command = apply
+
+  variables {
+    preview_enabled = true
+    preview_stack   = "legacy"
+  }
+
+  assert {
+    condition = length(aws_lb_listener.preview) == 1 && alltrue([
+      for l in aws_lb_listener.preview : one(l.default_action).target_group_arn == aws_lb_target_group.legacy.arn
+    ])
+    error_message = "With preview_stack = legacy the preview listener forwards to tg-legacy."
+  }
+}
+
+run "the_preview_stack_must_be_modern_or_legacy" {
+  command = plan
+
+  variables {
+    preview_enabled = true
+    preview_stack   = "both"
+  }
+
+  expect_failures = [var.preview_stack]
+}
+
 run "target_groups_follow_the_design" {
   command = apply
 

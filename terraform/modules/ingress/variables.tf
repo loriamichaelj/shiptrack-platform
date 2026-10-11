@@ -72,9 +72,20 @@ variable "preview_enabled" {
 }
 
 variable "preview_port" {
-  description = "Port of the modern preview listener."
+  description = "Port of the preview listener."
   type        = number
   default     = 8080
+}
+
+variable "preview_stack" {
+  description = "Which stack the preview listener forwards to: modern while legacy still takes traffic, legacy once modern serves the main address and legacy is kept reachable on this port (ADR-0032)."
+  type        = string
+  default     = "modern"
+
+  validation {
+    condition     = contains(["modern", "legacy"], var.preview_stack)
+    error_message = "preview_stack must be modern or legacy."
+  }
 }
 
 variable "ui_stickiness_seconds" {
