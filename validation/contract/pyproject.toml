@@ -1,0 +1,24 @@
+[project]
+name = "shiptrack-contract"
+version = "0.1.0"
+description = "The API contract suite for ShipTrack: the executable form of shiptrack-legacy design section 3."
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28,<1",
+    "pytest>=8.3,<10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --junitxml=results/junit.xml"
+markers = [
+    "smoke: fast post-deploy subset; creates at most one ZZTEST shipment",
+    "full: everything",
+    "ui: checks of the served UI shell and its assets (included in smoke)",
+    "ui_parity: both stacks must serve the same UI build; run only when both are deployed (cutover gate G6)",
+    "pod: proof-of-delivery upload and read-back; needs one pinned stack",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

@@ -33,8 +33,10 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `terraform/modules/` | `network`, `kms`, `database`, `storage`, `ingress`, `observability`, `contract`, `security-services` |
 | `terraform/envs/dev/` | The environment that wires the modules together |
 | `db/` | `bootstrap.sql` (database, roles, schema) and its runbook |
+| `validation/contract/` | The API contract suite (pytest and httpx): the executable form of legacy design §3, run against either stack through the ALB |
 | `validation/simulator/` | The carrier event simulator: creates shipments, sends lifecycles with duplicates and out-of-order events, and records a ledger |
-| `scripts/` | `terraform-ci.sh`, the plan and apply wrapper that masks identifiers in logs |
+| `validation/loadtest/` | The k6 scenarios: `baseline`, `stress`, and `soak` |
+| `scripts/` | `terraform-ci.sh`, the plan, apply, and drift wrapper that masks identifiers in logs; `force-unlock.sh`; and the shell tests for both |
 
 ## Workflows
 
@@ -47,6 +49,9 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `simulator-ci.yml` | pull requests touching the simulator | Lint and tests |
 | `inspect-account.yml` | by hand | Read-only list of the account's security services by name and status |
 | `unlock-state.yml` | by hand, `dev` environment | Removes a stale state lock, given its ID. Refuses a lock with another ID or one younger than 30 minutes (ADR-0025) |
+| `drift.yml` | nightly, and by hand | Plans `terraform/envs/dev` with the plan role. Changes open or update one issue, "Drift detected: platform/dev", with addresses and actions only; a clean plan closes it (ADR-0027) |
+| `validation.yml` | by hand | Runs the contract suite (`smoke`, `full`, or `ui_parity`) or a k6 baseline against one stack through the ALB. Uploads nothing |
+| `validation-ci.yml` | pull requests touching `validation/` or `scripts/` | Lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests |
 
 ## Opening both UIs side by side
 
@@ -75,9 +80,9 @@ listener is outside the cutover weights (ADR-0026). Delete the secret and apply 
 | P2 Database | Done and applied; the database is bootstrapped (see the runbook) |
 | P3 Storage and ingress | Done and applied; weights are 100% legacy, 0% modern |
 | P5 Observability and contract | Done and applied |
-| P4 Security services | Partly applied. Config is adopted and recording; Inspector EC2 scanning is stuck enabling, and a few resources are still pending (ADR-0022) |
-| P6b Drift and validation workflows | Not on `dev`. Written on a branch and deferred; `drift.yml`, `validation.yml`, `validation-ci.yml` |
-| P7 Validation tooling | The simulator is on `dev` and has seeded the legacy stack. The contract suite and k6 scenarios are on the P6b branch, not on `dev` |
+| P4 Security services | Done and applied. Config is adopted and recording, and the Inspector enabler and ECR scanning configuration are created (ADR-0022) |
+| P6b Drift and validation workflows | On `dev`: `drift.yml`, `validation.yml`, `validation-ci.yml` (ADR-0027). Not yet run live |
+| P7 Validation tooling | On `dev`: the simulator, which has seeded the legacy stack, the contract suite, and the k6 scenarios. The contract suite is what modern's `deploy.yml` runs as its smoke test |
 | P8 Runbooks | Not started; written after the builds are complete |
 
 ## Local checks

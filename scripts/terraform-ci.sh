@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Plan or apply terraform/envs/dev. Run by .github/workflows/terraform-pr.yml and terraform-apply.yml.
-# Usage: scripts/terraform-ci.sh plan|apply
+# Plan or apply terraform/envs/dev. Run by .github/workflows/terraform-pr.yml, terraform-apply.yml,
+# and drift.yml.
+# Usage: scripts/terraform-ci.sh plan|apply|drift
+#
+# `drift` plans with -detailed-exitcode and exits 0 (no changes), 2 (changes), or 1 (error), so the
+# nightly workflow can tell drift from failure.
 #
 # The state bucket name contains the account ID, so the backend is configured at init time
 # instead of being committed. Nothing in the output names the account.
@@ -13,8 +17,8 @@
 #   TF_VAR_*          input variables, from repository variables
 set -euo pipefail
 
-mode=${1:?usage: terraform-ci.sh plan|apply}
-[[ "$mode" == plan || "$mode" == apply ]] || { echo "unknown mode: $mode" >&2; exit 2; }
+mode=${1:?usage: terraform-ci.sh plan|apply|drift}
+[[ "$mode" == plan || "$mode" == apply || "$mode" == drift ]] || { echo "unknown mode: $mode" >&2; exit 2; }
 : "${AWS_REGION:?AWS_REGION is required}"
 export TF_IN_AUTOMATION=1 TF_INPUT=0
 
@@ -27,13 +31,17 @@ account=$(aws sts get-caller-identity --query Account --output text)
 echo "::add-mask::$account"
 bucket="shiptrack-tfstate-${account}-${AWS_REGION}"
 
-# Run a terraform command quietly; show its output only if it fails, with the account and the
-# resource IDs masked (the logs of a public repository are public).
+# Print a file with the account and resource IDs masked: the logs of a public repository are public.
+mask() {
+  sed -E "s/${account}/***/g; s/\[id=[^]]*\]/[id=***]/g; s/(vpc|subnet|sg|rtb|igw|eipalloc|nat|vpce|eni|acl|rtbassoc)-[0-9a-f]{8,17}/\1-***/g" "$1" >&2
+}
+
+# Run a terraform command quietly; show its output only if it fails, with identifiers masked.
 quietly() {
   local out
   out=$(mktemp)
   if ! "$@" >"$out" 2>&1; then
-    sed -E "s/${account}/***/g; s/\[id=[^]]*\]/[id=***]/g; s/(vpc|subnet|sg|rtb|igw|eipalloc|nat|vpce|eni|acl|rtbassoc)-[0-9a-f]{8,17}/\1-***/g" "$out" >&2
+    mask "$out"
     rm -f "$out"
     return 1
   fi
@@ -76,15 +84,27 @@ quietly terraform init -input=false \
 # The plan file stays on the runner: it is never uploaded, and apply makes its own in the same job.
 plan=$(mktemp -u)
 trap 'rm -f "$plan"' EXIT
-quietly terraform plan -input=false -lock-timeout=120s -out="$plan"
+exitcode=0
+if [[ "$mode" == drift ]]; then
+  out=$(mktemp)
+  terraform plan -input=false -lock-timeout=120s -detailed-exitcode -out="$plan" >"$out" 2>&1 || exitcode=$?
+  if [[ "$exitcode" -eq 1 ]]; then
+    mask "$out"
+    rm -f "$out"
+    exit 1
+  fi
+  rm -f "$out"
+else
+  quietly terraform plan -input=false -lock-timeout=120s -out="$plan"
+fi
 text=$(summarize "$plan")
 printf '%s\n' "$text"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   printf '## Terraform %s (%s)\n\n%s\n' "$mode" "$dir" "$text" >>"$GITHUB_STEP_SUMMARY"
 fi
-if [[ "$mode" == plan ]]; then
+if [[ "$mode" == plan || "$mode" == drift ]]; then
   [[ -z "${SUMMARY_FILE:-}" ]] || printf '%s\n' "$text" >"$SUMMARY_FILE"
-  exit 0
+  exit "$exitcode"
 fi
 
 quietly terraform apply -input=false "$plan"
