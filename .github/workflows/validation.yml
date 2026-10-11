@@ -19,6 +19,7 @@ on:
           - contract-smoke
           - contract-full
           - contract-ui-parity
+          - contract-sla
           - k6-baseline
       target:
         description: "The stack to address (ignored by contract-ui-parity, which uses both)"
@@ -88,7 +89,8 @@ jobs:
         run: |
           case "$SUITE" in
             contract-smoke) marker="smoke" ;;
-            contract-full) marker="not ui_parity" ;;
+            contract-full) marker="not ui_parity and not sla" ;;
+            contract-sla) marker="sla" ;;
             contract-ui-parity) marker="ui_parity" ;;
             *) echo "unknown suite: $SUITE" >&2; exit 1 ;;
           esac
