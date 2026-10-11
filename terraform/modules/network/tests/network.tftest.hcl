@@ -164,6 +164,57 @@ run "tls_opens_443" {
   }
 }
 
+run "the_preview_port_is_closed_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.preview) == 0
+    error_message = "Without named CIDRs the preview port stays closed."
+  }
+}
+
+run "the_preview_port_opens_only_to_named_cidrs" {
+  command = plan
+
+  variables {
+    preview_ingress_cidrs = ["192.0.2.10/32", "198.51.100.0/24"]
+    preview_port          = 8081
+  }
+
+  assert {
+    condition = length(aws_vpc_security_group_ingress_rule.preview) == 2 && alltrue([
+      for r in aws_vpc_security_group_ingress_rule.preview : r.from_port == 8081 && r.to_port == 8081 && r.ip_protocol == "tcp"
+    ])
+    error_message = "One TCP rule per named CIDR, on the preview port only."
+  }
+
+  # The public ports are untouched.
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.alb) == 1
+    error_message = "The preview rules do not change the ALB's public ports."
+  }
+}
+
+run "the_preview_port_refuses_the_world" {
+  command = plan
+
+  variables {
+    preview_ingress_cidrs = ["0.0.0.0/0"]
+  }
+
+  expect_failures = [var.preview_ingress_cidrs]
+}
+
+run "the_preview_port_refuses_the_application_ports" {
+  command = plan
+
+  variables {
+    preview_port = 8000
+  }
+
+  expect_failures = [var.preview_port]
+}
+
 run "rejects_a_small_vpc" {
   command = plan
 

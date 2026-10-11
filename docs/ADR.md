@@ -29,6 +29,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0023 | `carrier-event-simulator` | Accepted |
 | 0024 | `composite-alarms-need-an-unscoped-grant` | Accepted |
 | 0025 | `state-lock-recovery-workflow` | Accepted |
+| 0026 | `modern-preview-listener` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -330,4 +331,14 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** `.github/workflows/unlock-state.yml` runs `scripts/force-unlock.sh` by hand in the `dev` environment, so a reviewer approves each run, with the apply role. It takes the lock ID from the failing run's message. The script reads the lock object in the state bucket and refuses unless the ID matches exactly and the lock is older than 30 minutes. It shares `terraform-apply`'s concurrency group, so it waits for a running apply instead of racing it.
 
 **Consequences:** A stale lock is cleared by a reviewed pipeline run instead of someone's own credentials. A lock younger than 30 minutes cannot be removed this way, which is the case where removing it could corrupt a run that is still writing state. The workflow covers `terraform/envs/dev` only; the bootstrap and legacy and modern states are separate and would need their own.
+
+## ADR-0026: modern-preview-listener
+
+**Status:** Accepted
+
+**Context:** There is one ALB and no custom domain, so legacy and modern share one address. Modern is reachable only through the test-routing headers, which a browser does not send, so a person cannot open its UI next to legacy's. Weighting traffic toward modern to look at it would be the cutover itself.
+
+**Decision:** An optional listener on `preview_port` (default 8080) forwards everything to `tg-modern`, outside the cutover weights. The ALB security group opens that port only to the CIDRs in `preview_ingress_cidrs`. The default is empty, which creates no listener and no rule, and `0.0.0.0/0` is refused by validation. The CIDRs come from the `PREVIEW_CIDRS` repository variable through `TF_VAR_preview_ingress_cidrs`, so a person's address is not committed to a public repository. The listener is plain HTTP, like the main one without a domain (risk R-01).
+
+**Consequences:** Legacy's routing is not touched, and unsetting the variable removes the listener and the rule. Modern answers on a second port to anyone in the named CIDRs, with no token, and shares the legacy database, so what is done in its UI writes real rows. The WAF association, if enabled, covers the ALB and so this listener. The address is a person's current one, so it needs updating when it changes. With a custom domain and TLS this should move to a host-based rule on the TLS listener.
 

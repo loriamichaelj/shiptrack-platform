@@ -10,6 +10,8 @@ module "network" {
   nat_gateway_mode           = var.nat_gateway_mode
   enable_interface_endpoints = var.enable_interface_endpoints
   allowed_ingress_cidrs      = var.allowed_ingress_cidrs
+  preview_ingress_cidrs      = var.preview_ingress_cidrs
+  preview_port               = var.preview_port
   enable_tls                 = var.enable_tls
   logs_kms_key_arn           = module.kms.logs_key_arn
 }
@@ -54,6 +56,8 @@ module "ingress" {
   secrets_key_arn       = module.kms.secrets_key_arn
   cutover               = var.cutover
   ui_stickiness_seconds = var.ui_stickiness_seconds
+  preview_enabled       = length(var.preview_ingress_cidrs) > 0
+  preview_port          = var.preview_port
   domain_name           = var.domain_name
   hosted_zone_name      = var.hosted_zone_name
   enable_waf            = var.enable_waf

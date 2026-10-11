@@ -50,6 +50,37 @@ run "alb_follows_the_design" {
   }
 }
 
+run "there_is_no_preview_listener_by_default" {
+  command = apply
+
+  assert {
+    condition     = length(aws_lb_listener.preview) == 0
+    error_message = "The preview listener exists only when preview_enabled is set."
+  }
+}
+
+run "the_preview_listener_forwards_everything_to_modern" {
+  command = apply
+
+  variables {
+    preview_enabled = true
+    preview_port    = 8081
+  }
+
+  assert {
+    condition = length(aws_lb_listener.preview) == 1 && alltrue([
+      for l in aws_lb_listener.preview : l.port == 8081 && l.protocol == "HTTP" && one(l.default_action).type == "forward" && one(l.default_action).target_group_arn == aws_lb_target_group.modern.arn
+    ])
+    error_message = "The preview listener forwards all traffic to tg-modern, outside the cutover weights."
+  }
+
+  # The weighted default of the main listener is not touched by the preview listener.
+  assert {
+    condition     = aws_lb_listener.http.port == 80
+    error_message = "The main listener stays on port 80."
+  }
+}
+
 run "target_groups_follow_the_design" {
   command = apply
 

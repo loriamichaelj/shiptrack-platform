@@ -213,6 +213,23 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+# A second address for the modern stack. It is not part of the cutover: it never changes how the
+# weighted rules on the main listener route, and removing it changes nothing for legacy.
+resource "aws_lb_listener" "preview" {
+  #checkov:skip=CKV_AWS_2: plain HTTP, like the main listener without a custom domain (risk R-01)
+  #checkov:skip=CKV_AWS_103: no TLS listener exists without a custom domain (risk R-01)
+  count = var.preview_enabled ? 1 : 0
+
+  load_balancer_arn = aws_lb.this.arn
+  port              = var.preview_port
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.modern.arn
+  }
+}
+
 resource "aws_lb_listener" "https" {
   count = local.tls ? 1 : 0
 

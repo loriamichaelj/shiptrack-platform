@@ -140,6 +140,8 @@ jobs:
           TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
           TF_VAR_hosted_zone_name: ${{ vars.HOSTED_ZONE_NAME }}
           TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
+          # Must match terraform-apply.yml, or the plan shows the preview listener as a change.
+          TF_VAR_preview_ingress_cidrs: ${{ vars.PREVIEW_CIDRS || '[]' }}
           SUMMARY_FILE: ${{ runner.temp }}/plan-summary.md
         run: scripts/terraform-ci.sh plan
       - name: Comment the plan summary

@@ -65,3 +65,25 @@ variable "karpenter_discovery_tag" {
   type        = string
   default     = "shiptrack"
 }
+
+variable "preview_ingress_cidrs" {
+  description = "CIDRs allowed to reach the modern preview listener (var.preview_port). Empty, the default, opens nothing. Open to the world is refused: name the addresses that need it."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.preview_ingress_cidrs : can(cidrhost(c, 0)) && !contains(["0.0.0.0/0", "::/0"], c)])
+    error_message = "Each preview CIDR must be a valid IPv4 CIDR block and not 0.0.0.0/0."
+  }
+}
+
+variable "preview_port" {
+  description = "Port of the modern preview listener on the ALB."
+  type        = number
+  default     = 8080
+
+  validation {
+    condition     = var.preview_port >= 1024 && var.preview_port <= 65535 && !contains([8000, 9090], var.preview_port)
+    error_message = "The preview port must be 1024 to 65535 and not 8000 or 9090, which the application uses."
+  }
+}

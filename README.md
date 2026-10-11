@@ -48,6 +48,21 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `inspect-account.yml` | by hand | Read-only list of the account's security services by name and status |
 | `unlock-state.yml` | by hand, `dev` environment | Removes a stale state lock, given its ID. Refuses a lock with another ID or one younger than 30 minutes (ADR-0025) |
 
+## Opening both UIs side by side
+
+The ALB's address serves legacy: the weighted rules send all traffic to it until the cutover moves
+weights. To open the modern UI beside it without the test-routing headers, set the `PREVIEW_CIDRS`
+repository variable to a JSON list of the addresses that may reach it, for example
+`["203.0.113.7/32"]`, and run `terraform-apply`. That adds a listener on port 8080 that forwards
+everything to modern. Then:
+
+- legacy: `http://<ALB address>/ui/`
+- modern: `http://<ALB address>:8080/ui/`
+
+The variable is not committed, because it names a person's address. Left unset, nothing is created,
+and `0.0.0.0/0` is refused. The listener is outside the cutover weights (ADR-0026). Unset the
+variable and apply to remove it.
+
 ## Status
 
 | Phase | State |
