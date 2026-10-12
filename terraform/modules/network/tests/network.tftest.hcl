@@ -201,6 +201,46 @@ run "the_preview_port_opens_only_to_named_cidrs" {
   }
 }
 
+run "the_grafana_port_is_closed_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.grafana) == 0
+    error_message = "Without named CIDRs the Grafana port stays closed."
+  }
+}
+
+run "the_grafana_port_opens_only_to_the_named_cidrs" {
+  command = plan
+
+  variables {
+    preview_ingress_cidrs = ["192.0.2.10/32", "198.51.100.0/24"]
+    grafana_port          = 3001
+  }
+
+  assert {
+    condition = length(aws_vpc_security_group_ingress_rule.grafana) == 2 && alltrue([
+      for r in aws_vpc_security_group_ingress_rule.grafana : r.from_port == 3001 && r.to_port == 3001 && r.ip_protocol == "tcp"
+    ])
+    error_message = "One TCP rule per named CIDR, on the Grafana port only."
+  }
+
+  assert {
+    condition     = alltrue([for k in keys(aws_vpc_security_group_ingress_rule.grafana) : can(regex("^[0-9]+$", k))])
+    error_message = "The Grafana rules are keyed by position, not by CIDR."
+  }
+}
+
+run "the_grafana_port_refuses_the_application_and_preview_ports" {
+  command = plan
+
+  variables {
+    grafana_port = 8080
+  }
+
+  expect_failures = [var.grafana_port]
+}
+
 run "the_preview_port_refuses_the_world" {
   command = plan
 

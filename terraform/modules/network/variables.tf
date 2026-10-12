@@ -77,6 +77,17 @@ variable "preview_ingress_cidrs" {
   }
 }
 
+variable "grafana_port" {
+  description = "Port of the Grafana listener on the ALB. It opens to the same named CIDRs as the preview port, and to nothing else."
+  type        = number
+  default     = 3000
+
+  validation {
+    condition     = var.grafana_port >= 1024 && var.grafana_port <= 65535 && !contains([8000, 9090, var.preview_port], var.grafana_port)
+    error_message = "The Grafana port must be 1024 to 65535 and not 8000, 9090, or the preview port."
+  }
+}
+
 variable "preview_port" {
   description = "Port of the modern preview listener on the ALB."
   type        = number

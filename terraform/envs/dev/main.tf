@@ -12,6 +12,7 @@ module "network" {
   allowed_ingress_cidrs      = var.allowed_ingress_cidrs
   preview_ingress_cidrs      = var.preview_ingress_cidrs
   preview_port               = var.preview_port
+  grafana_port               = var.grafana_port
   enable_tls                 = var.enable_tls
   logs_kms_key_arn           = module.kms.logs_key_arn
 }
@@ -58,6 +59,7 @@ module "ingress" {
   ui_stickiness_seconds = var.ui_stickiness_seconds
   preview_enabled       = length(var.preview_ingress_cidrs) > 0
   preview_port          = var.preview_port
+  grafana_port          = var.grafana_port
   preview_stack         = var.preview_stack
   domain_name           = var.domain_name
   hosted_zone_name      = var.hosted_zone_name
@@ -120,6 +122,7 @@ module "contract" {
     listener_arn            = module.ingress.listener_arn
     tg_legacy_arn           = module.ingress.tg_legacy_arn
     tg_modern_arn           = module.ingress.tg_modern_arn
+    tg_grafana_arn          = module.ingress.tg_grafana_arn
     base_url                = module.ingress.base_url
     rds_endpoint            = module.database.endpoint
     rds_port                = tostring(module.database.port)

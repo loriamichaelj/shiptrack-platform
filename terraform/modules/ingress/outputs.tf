@@ -28,6 +28,11 @@ output "tg_legacy_arn_suffix" {
   value       = aws_lb_target_group.legacy.arn_suffix
 }
 
+output "tg_grafana_arn" {
+  description = "ARN of the target group a TargetGroupBinding registers modern's Grafana pods in."
+  value       = aws_lb_target_group.grafana.arn
+}
+
 output "tg_modern_arn" {
   description = "ARN of the modern target group."
   value       = aws_lb_target_group.modern.arn

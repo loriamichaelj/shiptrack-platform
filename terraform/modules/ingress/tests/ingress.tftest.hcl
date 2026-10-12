@@ -25,6 +25,11 @@ override_resource {
   values = { arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/modern/0123456789abcdef" }
 }
 
+override_resource {
+  target = aws_lb_target_group.grafana
+  values = { arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/grafana/0123456789abcdef" }
+}
+
 variables {
   vpc_id                = "vpc-mock"
   public_subnet_ids     = ["subnet-a", "subnet-b", "subnet-c"]
@@ -94,6 +99,42 @@ run "the_preview_listener_can_keep_legacy_reachable" {
       for l in aws_lb_listener.preview : one(l.default_action).target_group_arn == aws_lb_target_group.legacy.arn
     ])
     error_message = "With preview_stack = legacy the preview listener forwards to tg-legacy."
+  }
+}
+
+run "there_is_no_grafana_listener_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_lb_listener.grafana) == 0
+    error_message = "The Grafana listener exists only when preview_enabled is set."
+  }
+
+  assert {
+    condition     = aws_lb_target_group.grafana.target_type == "ip" && one(aws_lb_target_group.grafana.health_check).path == "/api/health"
+    error_message = "The Grafana target group always exists, with ip targets and Grafana's health path."
+  }
+}
+
+run "the_grafana_listener_forwards_only_to_the_grafana_group" {
+  command = plan
+
+  variables {
+    preview_enabled = true
+    grafana_port    = 3001
+  }
+
+  assert {
+    condition = length(aws_lb_listener.grafana) == 1 && alltrue([
+      for l in aws_lb_listener.grafana : l.port == 3001 && l.protocol == "HTTP" && one(l.default_action).type == "forward" && one(l.default_action).target_group_arn == aws_lb_target_group.grafana.arn
+    ])
+    error_message = "The Grafana listener forwards everything on its port to the Grafana group."
+  }
+
+  # Neither the main listener's weights nor the preview listener move.
+  assert {
+    condition     = length(aws_lb_listener.preview) == 1 && one(aws_lb_listener.preview[0].default_action).target_group_arn == aws_lb_target_group.modern.arn
+    error_message = "The preview listener is unchanged by the Grafana listener."
   }
 }
 

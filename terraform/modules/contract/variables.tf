@@ -22,6 +22,7 @@ variable "contract" {
     listener_arn            = string
     tg_legacy_arn           = string
     tg_modern_arn           = string
+    tg_grafana_arn          = string
     base_url                = string
     rds_endpoint            = string
     rds_port                = string

@@ -89,6 +89,28 @@ resource "aws_lb_target_group" "modern" {
   }
 }
 
+# Modern's Grafana. The group always exists, so the contract can always name it; the listener below
+# exists only with the preview listener. Pods register through a TargetGroupBinding, never here.
+resource "aws_lb_target_group" "grafana" {
+  #checkov:skip=CKV_AWS_378: traffic from the ALB to targets stays inside the VPC; TLS ends at the ALB
+  name        = "${var.name_prefix}-tg-grafana"
+  target_type = "ip"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+
+  deregistration_delay = 30
+
+  health_check {
+    path                = "/api/health"
+    interval            = 15
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    matcher             = "200"
+  }
+}
+
 # --- Test-routing token --------------------------------------------------------------------------
 # A low-sensitivity selector that lets CI address one stack directly. It appears in the listener
 # rules and so in state (risk R-04). Rotate it by replacing the random_password resource.
@@ -228,6 +250,23 @@ resource "aws_lb_listener" "preview" {
   default_action {
     type             = "forward"
     target_group_arn = var.preview_stack == "legacy" ? aws_lb_target_group.legacy.arn : aws_lb_target_group.modern.arn
+  }
+}
+
+# Modern's Grafana, on its own port, reachable only from the preview CIDRs (the network module). It
+# is not part of the cutover and never touches the weighted rules.
+resource "aws_lb_listener" "grafana" {
+  #checkov:skip=CKV_AWS_2: plain HTTP, like the main listener without a custom domain (risk R-01)
+  #checkov:skip=CKV_AWS_103: no TLS listener exists without a custom domain (risk R-01)
+  count = var.preview_enabled ? 1 : 0
+
+  load_balancer_arn = aws_lb.this.arn
+  port              = var.grafana_port
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.grafana.arn
   }
 }
 
