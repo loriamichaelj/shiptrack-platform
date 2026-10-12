@@ -443,3 +443,20 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** G6 is retired. The `ui_parity` test, its marker, and the `contract-ui-parity` suite are removed, and the design, runbook, and README no longer list it. The modern UI uses only the endpoints of the frozen contract.
 
 **Consequences:** The two stacks serve different UI builds. Nothing mixes them in normal use: the main address is modern's and the preview port is legacy's, each answering for both page and assets. The one exposure is a rollback of the weights, after which a browser holding modern's cached `index.html` asks legacy for assets that legacy does not have; a reload fixes it. The contract's `ui` checks remain, and assert the shell, its assets, deep links, and the missing-asset 404 on whichever stack is addressed.
+
+## ADR-0034: data-reset-by-gated-workflow
+
+**Status:** Accepted
+
+**Context:** Synthetic traffic, the simulator, and the contract suites create shipments that nothing deletes: the API has no delete and the contract is frozen. Modern's live page and Browse read every shipment, so the data only grows. The owner asked for a workflow that resets all the data, and that it belong to the platform, because the database and the proof-of-delivery bucket are the platform's and both stacks read them. It was first built in `shiptrack-legacy` (legacy ADR-0013) and moved here before it was ever run.
+
+**Decision:**
+- `ShipTrack-ResetData` is an SSM document created by `terraform/modules/data_reset`, like the ones the stacks run on the legacy hosts, and it carries its own copy of `db/reset-data.sql` and `scripts/reset-data.sh`, so a reset needs no deploy on either stack. `ops-reset-data.yml` runs it on every host tagged `Stack=legacy`, one at a time, with the apply role, behind the `dev` environment's reviewer, in the `tf-platform-dev` concurrency group.
+- The executor is a legacy host because the database is private and a host is the one place a workflow can reach it from (legacy ADR-0011). The script is platform's: it reads the application role's credentials from the contract's `db_app_secret_arn` and runs the SQL as that role over verified TLS. It needs nothing from the legacy application, so retiring the legacy application's code does not break it; retiring the hosts does, and then the executor moves (a Kubernetes Job in modern's chart) without changing the SQL.
+- It refuses unless the confirmation is exactly `delete-all-shipments`, in the workflow and in the document's allowed pattern, which has no default.
+- Order: the database in one transaction (alerts, documents, events, shipments), then the objects under `pod/` in the proof-of-delivery bucket, then each host's local files. A failure in the database leaves the files alone.
+- Carriers and the schema are kept. Five demo shipments with fixed tracking numbers (`MF0000000001` to `MF0000000005`, one in each of five statuses) are created afterwards unless `seed_demo` is `no`, so that there is always something to look up.
+- Output is counts and those five synthetic tracking numbers.
+- The document already existed, created by the legacy Terraform. An `import` block adopts it here and legacy's Terraform forgets it without deleting it (`removed` with `destroy = false`), so nothing is destroyed and the name never lapses, whichever apply runs first.
+
+**Consequences:** It is the only thing that deletes shipments, it cannot be undone, and it needs a person to approve it. Events still in the queue for shipments that are gone fail to apply and end in the dead-letter queue, so the traffic must be stopped and the queue drained first; the workflow says so and nothing checks it. Versioned buckets keep earlier versions of the removed documents as noncurrent versions, unreachable from the application. The seeded numbers are fixed, so a later run reuses them. `db/tests/reset-data.sh` runs the SQL as the application role against a PostgreSQL that has the legacy migration's tables, so a schema change that breaks the reset fails there; the fixture mirrors the migration by hand.

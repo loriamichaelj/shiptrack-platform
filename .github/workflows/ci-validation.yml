@@ -1,14 +1,16 @@
 name: ci-validation
 
 # Checks the validation tooling and the scripts that gate Terraform: lint and tests for the contract
-# suite and the simulator, `k6 inspect` for each load scenario, and the shell tests. None of this
-# needs AWS, so it also runs for pull requests from forks.
+# suite and the simulator, `k6 inspect` for each load scenario, the shell tests, and the database
+# scripts against a throwaway PostgreSQL. None of this needs AWS, so it also runs for pull requests
+# from forks.
 
 on:
   pull_request:
     paths:
       - "validation/**"
       - "scripts/**"
+      - "db/**"
       - ".github/workflows/ci-validation.yml"
 
 permissions:
@@ -88,7 +90,7 @@ jobs:
         with:
           persist-credentials: false
       - name: shellcheck
-        run: shellcheck -x scripts/*.sh scripts/tests/*.sh
+        run: shellcheck -x scripts/*.sh scripts/tests/*.sh db/tests/*.sh
       - name: Test terraform-ci.sh against fake aws and terraform
         run: scripts/tests/test_terraform_ci.sh
       - name: Test force-unlock.sh against fake aws and terraform
@@ -99,3 +101,18 @@ jobs:
         run: scripts/tests/test_cutover_gates.sh
       - name: Test security-findings.sh against fake Inspector and Security Hub
         run: scripts/tests/test_security_findings.sh
+      - name: Test ssm-run.sh against a fake SSM
+        run: scripts/tests/test_ssm_run.sh
+      - name: Test reset-data.sh against a fake aws and psql
+        run: scripts/tests/test_reset_data.sh
+
+  database:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run bootstrap.sql twice against PostgreSQL
+        run: db/tests/bootstrap.sh
+      - name: Run reset-data.sql as the application role against PostgreSQL
+        run: db/tests/reset-data.sh

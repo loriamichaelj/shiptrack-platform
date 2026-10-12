@@ -32,11 +32,11 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `bootstrap/` | State bucket, state key, the workload permission boundary, and the nine pipeline roles. Applied only by `apply-bootstrap.yml` |
 | `terraform/modules/` | `network`, `kms`, `database`, `storage`, `ingress`, `observability`, `contract`, `security-services` |
 | `terraform/envs/dev/` | The environment that wires the modules together |
-| `db/` | `bootstrap.sql` (database, roles, schema) and its runbook |
+| `db/` | `bootstrap.sql` (database, roles, schema) and its runbook, and `reset-data.sql` (the data reset, ADR-0034) |
 | `validation/contract/` | The API contract suite (pytest and httpx): the executable form of legacy design §3, run against either stack through the ALB |
 | `validation/simulator/` | The carrier event simulator: creates shipments, sends lifecycles with duplicates and out-of-order events, and records a ledger |
 | `validation/loadtest/` | The k6 scenarios: `baseline`, `stress`, and `soak` |
-| `scripts/` | `terraform-ci.sh`, the plan, apply, and drift wrapper that masks identifiers in logs; `force-unlock.sh`; and the shell tests for both |
+| `scripts/` | `terraform-ci.sh`, the plan, apply, and drift wrapper that masks identifiers in logs; `force-unlock.sh`; `ssm-run.sh` and `reset-data.sh` for the data reset; and their shell tests |
 
 ## Workflows
 
@@ -48,6 +48,7 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 | `ci-scrub.yml` | pull requests | gitleaks plus rules for account IDs and ALB DNS names |
 | `ci-simulator.yml` | pull requests touching the simulator | Lint and tests |
 | `ops-unlock-state.yml` | by hand, `dev` environment | Removes a stale state lock, given its ID. Refuses a lock with another ID or one younger than 30 minutes (ADR-0025) |
+| `ops-reset-data.yml` | by hand, `dev` environment | Deletes every shipment, its events, documents, and alerts, and the document files in S3 and on each legacy host, then seeds five demo shipments (`MF0000000001` to `MF0000000005`). Needs the typed confirmation `delete-all-shipments`; cannot be undone (ADR-0034) |
 | `check-drift.yml` | nightly, and by hand | Plans `terraform/envs/dev` with the plan role. Changes open or update one issue, "Drift detected: platform/dev", with addresses and actions only; a clean plan closes it (ADR-0027) |
 | `check-live-stack.yml` | by hand | Runs the contract suite (`smoke`, `full`, or `sla`) or a k6 baseline against one stack through the ALB. Uploads nothing |
 | `ci-validation.yml` | pull requests touching `validation/` or `scripts/` | Lint and tests for the contract suite and the simulator, `k6 inspect` for each scenario, and the shell tests |
@@ -117,7 +118,8 @@ actionlint
 
 `bootstrap/tests/moto.sh` runs the real bootstrap script against a moto server. `db/tests/bootstrap.sh`
 runs `bootstrap.sql` twice against a throwaway PostgreSQL 17 container (it needs Docker) and checks
-that the second run changes nothing.
+that the second run changes nothing; `db/tests/reset-data.sh` runs `reset-data.sql` as the
+application role against the same kind of container.
 
 The wrapper scripts and the validation tooling are checked without AWS too:
 
