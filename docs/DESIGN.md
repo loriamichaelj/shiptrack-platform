@@ -535,7 +535,7 @@ These tools own the **shared definition of correct** for both stacks.
 
 ### 6.11 CI/CD for this repo
 
-- **`ci-terraform.yml`** (pull_request, paths `terraform/**`, `bootstrap/**`)
+- **`ci-terraform.yml`** (pull_request, paths `terraform/**`, `bootstrap/**`, `scripts/reset-data.sh`, `db/reset-data.sql`)
   1. `terraform fmt -check -recursive`
   2. `init` (plan role)
   3. `validate`
@@ -545,7 +545,7 @@ These tools own the **shared definition of correct** for both stacks.
   7. `plan -out` (never uploaded as an artifact) with an address-and-action-only summary posted as a PR comment (§6.12); SARIF uploaded to code scanning
 
   `bootstrap/` gets the same lint and scan steps but is never planned here; it is planned and applied only by `apply-bootstrap.yml` (§6.1).
-- **`apply-terraform.yml`** (push to `dev`): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
+- **`apply-terraform.yml`** (push to `dev` that changes `terraform/**`, `scripts/reset-data.sh`, or `db/reset-data.sql`, which the reset document embeds): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
 - **`check-drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
 - **`ops-rollback-cutover.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Break-glass: legacy = 100, modern = 0 on every weighted rule and the default action, without a pull request (ADR-0028).
 - **`check-cutover-gates.yml`** and **`check-security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over an evidence window from CloudWatch; the second summarises Inspector and Security Hub findings by scope (modern, legacy, other) and fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). Both print numbers and titles only (ADR-0028).

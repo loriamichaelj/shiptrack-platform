@@ -44,7 +44,7 @@ Both read what this repository publishes through the SSM contract under `/shiptr
 |---|---|---|
 | `apply-bootstrap.yml` | by hand, `bootstrap` environment | Creates the state bucket on the first run, then the boundary and roles |
 | `ci-terraform.yml` | pull requests | Format, validate, tflint, Checkov, Trivy, and a plan comment with addresses and actions only |
-| `apply-terraform.yml` | push to `dev`, or by hand, `dev` environment | Plans and applies `terraform/envs/dev`; a reviewer approves each run |
+| `apply-terraform.yml` | push to `dev` (including a change to `scripts/reset-data.sh` or `db/reset-data.sql`, which the reset document embeds), or by hand, `dev` environment | Plans and applies `terraform/envs/dev`; a reviewer approves each run |
 | `ci-scrub.yml` | pull requests | gitleaks plus rules for account IDs and ALB DNS names |
 | `ci-simulator.yml` | pull requests touching the simulator | Lint and tests |
 | `ops-unlock-state.yml` | by hand, `dev` environment | Removes a stale state lock, given its ID. Refuses a lock with another ID or one younger than 30 minutes (ADR-0025) |

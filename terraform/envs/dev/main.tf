@@ -104,14 +104,6 @@ module "data_reset" {
   pod_bucket_name = module.storage.pod_bucket_name
 }
 
-# ShipTrack-ResetData was created by shiptrack-legacy's Terraform before it moved here (ADR-0034).
-# The import adopts the existing document, so nothing is destroyed or re-created, and the legacy
-# state forgets it without deleting it. Once an apply has imported it this block can be removed.
-import {
-  to = module.data_reset.aws_ssm_document.reset_data
-  id = "ShipTrack-ResetData"
-}
-
 module "contract" {
   source = "../../modules/contract"
 
