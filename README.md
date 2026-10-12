@@ -98,7 +98,7 @@ addresses and no others. Delete the secret and apply to remove both.
 | P6 scrub and local checks | Done: `ci-scrub.yml`, `.gitleaks.toml`, `.pre-commit-config.yaml`, `.tflint.hcl`, `.checkov.yaml` |
 | P1 Network and KMS | Done and applied |
 | P2 Database | Done and applied; the database is bootstrapped (see the runbook) |
-| P3 Storage and ingress | Done and applied; `track` and `default` are both at modern 100, and the preview port shows legacy (ADR-0032) |
+| P3 Storage and ingress | Done and applied; `track` and `default` are both at modern 100, the preview port shows legacy (ADR-0032), and the Grafana port (3000) opens to the same addresses (ADR-0035) |
 | P5 Observability and contract | Done and applied |
 | P4 Security services | Done and applied. Config is adopted and recording, and the Inspector enabler and ECR scanning configuration are created (ADR-0022) |
 | P6b Drift and validation workflows | Done and in use: `check-drift.yml`, `check-live-stack.yml`, `ci-validation.yml` (ADR-0027) |
