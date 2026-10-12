@@ -81,11 +81,13 @@ everything to one stack: modern while legacy takes the traffic, and legacy after
 
 - legacy: `http://<ALB address>/ui/`
 - modern: `http://<ALB address>:8080/ui/`
+- Grafana, on modern's metrics: `http://<ALB address>:3000/` (ADR-0035)
 
 It is a secret, not a variable, because it names a person's address and the logs and pull request
 comments of this repository are public: a secret is masked in logs, and the plan prints the rules
 by position, not by address. Left unset, nothing is created, and `0.0.0.0/0` is refused. The
-listener is outside the cutover weights (ADR-0026). Delete the secret and apply to remove it.
+listeners are outside the cutover weights (ADR-0026, ADR-0035). The Grafana port opens to the same
+addresses and no others. Delete the secret and apply to remove both.
 
 ## Status
 

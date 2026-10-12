@@ -349,6 +349,7 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
 - If `var.domain_name` is set: an ACM certificate (DNS-validated in the existing Route 53 hosted zone, looked up by data source), an HTTPS:443 listener with TLS policy `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` (the current console default: TLS 1.3/1.2 with hybrid post-quantum key exchange), and HTTP:80 → 301 redirect to HTTPS.
 - Otherwise: HTTP:80 only (risk R-01). All rules below attach to whichever listener serves traffic.
 - Optional preview listener (ADR-0026): when `preview_ingress_cidrs` is non-empty, HTTP on `preview_port` (default 8080) forwards everything to one stack, outside the cutover weights: `tg-modern` while legacy takes the traffic, `tg-legacy` once modern serves the main address (`preview_stack`, ADR-0032). The ALB security group opens that port only to those CIDRs. The CIDRs come from a repository secret, never a committed value, and `0.0.0.0/0` is refused.
+- Grafana listener (ADR-0035): with the preview listener, HTTP on `grafana_port` (default 3000) forwards everything to `tg-grafana`, an `ip` target group the modern addons root fills through a TargetGroupBinding. The same CIDRs may reach that port and no others. It is outside the cutover weights and never changes how the main listener routes.
 
 **Target groups**
 
@@ -468,6 +469,7 @@ Every alarm sets `alarm_description` to a string containing **owner**, **severit
 | `listener_arn` | String | Traffic-serving listener |
 | `tg_legacy_arn` | String | |
 | `tg_modern_arn` | String | |
+| `tg_grafana_arn` | String | Target group for modern's Grafana, registered by a TargetGroupBinding (ADR-0035) |
 | `base_url` | String | `https://<domain>` or `http://<alb_dns>` |
 | `rds_endpoint` | String | |
 | `rds_port` | String | |

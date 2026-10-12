@@ -460,3 +460,17 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - The document already existed, created by the legacy Terraform, so this Terraform adopted it with an `import` block and legacy's forgot it without deleting it (`removed` with `destroy = false`): nothing was destroyed and the name never lapsed. Both blocks were removed once the applies had run.
 
 **Consequences:** It is the only thing that deletes shipments, it cannot be undone, and it needs a person to approve it. Events still in the queue for shipments that are gone fail to apply and end in the dead-letter queue, so the traffic must be stopped and the queue drained first; the workflow says so and nothing checks it. Versioned buckets keep earlier versions of the removed documents as noncurrent versions, unreachable from the application. The seeded numbers are fixed, so a later run reuses them. The document embeds `db/reset-data.sql` and `scripts/reset-data.sh`, so `ci-terraform` and `apply-terraform` also run when either changes, and the change reaches the hosts through the `dev` gate. `db/tests/reset-data.sh` runs the SQL as the application role against a PostgreSQL that has the legacy migration's tables, so a schema change that breaks the reset fails there; the fixture mirrors the migration by hand.
+
+## ADR-0035: grafana-on-the-preview-addresses
+
+**Status:** Accepted
+
+**Context:** Modern's Grafana reads the Amazon Managed Prometheus workspace, but it is a ClusterIP service reached with `kubectl port-forward`, and the owner has no `kubectl` or AWS CLI. The owner wants to open Prometheus and Grafana dashboards in a browser while traffic runs. Amazon Managed Grafana would give HTTPS and a login, but needs IAM Identity Center and a console assignment this account's owner would have to do, and a service-account token for Terraform to provision dashboards.
+
+**Decision:**
+- The ALB gets a listener on `grafana_port` (default 3000), created with the preview listener and reachable only from the same `preview_ingress_cidrs` (the `PREVIEW_CIDRS` secret). It forwards everything to `tg-grafana`, an `ip` target group that always exists.
+- Platform registers no targets. The modern addons root binds the Grafana service to `tg_grafana_arn`, which the contract publishes, with a TargetGroupBinding.
+- The listener is HTTP, like the main listener and the preview listener without a custom domain (risk R-01). Grafana allows anonymous read-only access; the allow-listed addresses are the control. What it shows is metrics: route templates, status classes, and counts, with no tracking numbers or secrets.
+- It is outside the cutover weights and never touches the weighted rules.
+
+**Consequences:** One more port is open to the named addresses, and anyone who can send from one of them can read the metrics and use Grafana's query explorer. A path between the owner and the ALB can read them too, which is the same exposure as the preview port. Removing the `PREVIEW_CIDRS` secret and applying removes the listener and its rules; the target group stays. If a custom domain arrives, this listener should move to HTTPS with the rest.

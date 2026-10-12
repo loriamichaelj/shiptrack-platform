@@ -15,6 +15,7 @@ variables {
     listener_arn            = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/mock/0/0"
     tg_legacy_arn           = "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/legacy/0"
     tg_modern_arn           = "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/modern/0"
+    tg_grafana_arn          = "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/grafana/0"
     base_url                = "http://alb.mock.test"
     rds_endpoint            = "db.mock.test"
     rds_port                = "5432"
@@ -42,7 +43,7 @@ run "every_key_in_the_design_is_published" {
     condition = toset(keys(aws_ssm_parameter.contract)) == toset([
       "vpc_id", "vpc_cidr", "public_subnet_ids", "private_app_subnet_ids", "private_data_subnet_ids",
       "sg_alb_id", "sg_db_client_id", "alb_arn", "alb_dns_name", "listener_arn",
-      "tg_legacy_arn", "tg_modern_arn", "base_url", "rds_endpoint", "rds_port", "db_name",
+      "tg_legacy_arn", "tg_modern_arn", "tg_grafana_arn", "base_url", "rds_endpoint", "rds_port", "db_name",
       "db_max_connections", "db_app_secret_arn", "db_migrator_secret_arn",
       "kms_data_key_arn", "kms_secrets_key_arn", "kms_logs_key_arn",
       "pod_bucket_name", "pod_bucket_arn", "sns_sev1_arn", "sns_sev2_arn",

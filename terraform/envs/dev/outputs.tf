@@ -125,6 +125,11 @@ output "tg_modern_arn" {
   value       = module.ingress.tg_modern_arn
 }
 
+output "tg_grafana_arn" {
+  description = "ARN of the target group for modern's Grafana."
+  value       = module.ingress.tg_grafana_arn
+}
+
 output "base_url" {
   description = "Base URL of the ALB."
   value       = module.ingress.base_url

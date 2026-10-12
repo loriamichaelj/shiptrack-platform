@@ -71,6 +71,12 @@ variable "preview_port" {
   default     = 8080
 }
 
+variable "grafana_port" {
+  description = "Port of the Grafana listener, open to the same CIDRs as the preview port (ADR-0035)."
+  type        = number
+  default     = 3000
+}
+
 variable "preview_stack" {
   description = "Which stack the preview listener goes to: modern while legacy takes the traffic, legacy once modern serves the main address (ADR-0032)."
   type        = string

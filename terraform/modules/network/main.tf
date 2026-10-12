@@ -326,6 +326,19 @@ resource "aws_vpc_security_group_ingress_rule" "preview" {
   cidr_ipv4         = each.value
 }
 
+# Grafana (modern's, behind the Grafana listener) opens to the same named CIDRs and no others.
+resource "aws_vpc_security_group_ingress_rule" "grafana" {
+  # Keyed by position, for the reason given on the preview rule.
+  for_each = { for i, cidr in var.preview_ingress_cidrs : tostring(i) => cidr }
+
+  security_group_id = aws_security_group.alb.id
+  description       = "Grafana listener from a named address"
+  ip_protocol       = "tcp"
+  from_port         = var.grafana_port
+  to_port           = var.grafana_port
+  cidr_ipv4         = each.value
+}
+
 resource "aws_vpc_security_group_egress_rule" "alb" {
   security_group_id = aws_security_group.alb.id
   description       = "Anything inside the VPC"

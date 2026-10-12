@@ -71,6 +71,12 @@ variable "preview_enabled" {
   default     = false
 }
 
+variable "grafana_port" {
+  description = "Port of the Grafana listener. It is created with the preview listener, so it is reachable only from the CIDRs the network module opens."
+  type        = number
+  default     = 3000
+}
+
 variable "preview_port" {
   description = "Port of the preview listener."
   type        = number
