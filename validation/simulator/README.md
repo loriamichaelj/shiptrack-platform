@@ -35,4 +35,4 @@ install the wheel there with `--no-deps`. This is how legacy AP-06 (an in-proces
 events on restart) is proven.
 
 Test data goes under whichever carriers the plan picks; the carrier `ZZTEST` is reserved for the
-contract suite.
+contract suite. Nothing in the API deletes it: `ops-reset-data.yml` clears every shipment (ADR-0034).
