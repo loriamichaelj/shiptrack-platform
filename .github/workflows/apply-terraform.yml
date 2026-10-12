@@ -10,6 +10,9 @@ on:
       - dev
     paths:
       - "terraform/**"
+      # The ShipTrack-ResetData document embeds these two files (terraform/modules/data_reset).
+      - "scripts/reset-data.sh"
+      - "db/reset-data.sql"
   # A manual run applies the current state of `dev`: for a first apply, or to resume one that failed.
   workflow_dispatch:
 
