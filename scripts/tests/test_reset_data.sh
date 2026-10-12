@@ -23,7 +23,13 @@ case "$1 $2" in
   "ssm get-parameter") echo "arn:aws:secretsmanager:us-east-1:123456789012:secret:shiptrack/dev/db/app-AbCdEf" ;;
   "secretsmanager get-secret-value")
     echo '{"username":"shiptrack_app","password":"s3cret-pw","host":"db.example.internal","port":5432,"dbname":"shiptrack"}' ;;
-  "s3 ls") printf '2026-10-11 10:00:00 12 pod/a/b\n2026-10-11 10:00:01 12 pod/a/c\n' ;;
+  "s3 ls")
+    # Like the real CLI: exit 1 with nothing on stderr for an empty prefix, 254 for a service error.
+    case "${FAKE_S3:-two}" in
+      two) printf '2026-10-11 10:00:00 12 pod/a/b\n2026-10-11 10:00:01 12 pod/a/c\n' ;;
+      none) exit 1 ;;
+      error) echo "An error occurred (NoSuchBucket) when calling the ListObjectsV2 operation" >&2; exit 254 ;;
+    esac ;;
 esac
 exit 0
 AWS
@@ -77,6 +83,23 @@ check "a bucket name with shell characters is refused" "$?" "1"
 "$script" delete-all-shipments shiptrack-pod-test maybe >/dev/null 2>&1
 check "a seed value other than yes or no is refused" "$?" "1"
 check "none of the refusals reached the database" "$(grep -c '^psql' "$CALLS")" "0"
+
+# a host that finds nothing in S3 (every host after the first) carries on and cleans its own files
+echo x >"$work/pod/again"
+files=$(find "$work/pod" -type f | wc -l | tr -d ' ')
+: >"$CALLS"
+out=$(FAKE_S3=none "$script" delete-all-shipments shiptrack-pod-test yes 2>&1)
+check "an empty bucket is not an error" "$?" "0"
+check "...it reports zero objects" "$(grep -c '^RESET_DATA s3_objects_removed=0$' <<<"$out")" "1"
+check "...it removes nothing from S3" "$(grep -c 's3 rm' "$CALLS")" "0"
+check "...and still removes this host's files" "$(grep -c "^RESET_DATA local_files_removed=$files\$" <<<"$out")" "1"
+
+# any other failure to list stops the run before the host's files are touched
+echo x >"$work/pod/keep2"
+: >"$CALLS"
+FAKE_S3=error "$script" delete-all-shipments shiptrack-pod-test yes >/dev/null 2>&1
+check "a listing error is an error" "$?" "1"
+check "...and the host's files are kept" "$([[ -f "$work/pod/keep2" ]] && echo kept)" "kept"
 
 rm "$work/sql.sql"
 "$script" delete-all-shipments shiptrack-pod-test yes >/dev/null 2>&1

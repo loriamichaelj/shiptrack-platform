@@ -78,8 +78,15 @@ export PGSSLROOTCERT="$bundle"
 psql -X -q -tA --single-transaction -v ON_ERROR_STOP=1 -v "seed=$seed" -f "$sql" \
   "host=$host port=$port dbname=$dbname user=$user sslmode=verify-full"
 
-# 2. The documents in S3 (nothing in the database points at them any more)
-objects=$(aws s3 ls "s3://$bucket/pod/" --recursive 2>/dev/null | wc -l | tr -d ' ')
+# 2. The documents in S3 (nothing in the database points at them any more). `aws s3 ls` exits 1
+# with nothing on stderr when there is nothing under the prefix, which is what every host after the
+# first sees; any other failure (a missing bucket exits 254) stops the run.
+status=0
+listing=$(aws s3 ls "s3://$bucket/pod/" --recursive 2>"$work/ls.err") || status=$?
+if [[ "$status" -ne 0 && ( "$status" -ne 1 || -s "$work/ls.err" ) ]]; then
+  die "could not list the proof-of-delivery bucket (exit $status)"
+fi
+objects=$(grep -c . <<<"$listing" || true)
 if [[ "$objects" -gt 0 ]]; then
   aws s3 rm "s3://$bucket/pod/" --recursive --only-show-errors
 fi

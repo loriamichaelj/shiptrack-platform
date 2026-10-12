@@ -78,6 +78,9 @@ jobs:
         run: |
           # The document's podBucket defaults to the POD bucket, so the bucket name is not handled here.
           export PARAMETERS="{\"confirm\":[\"delete-all-shipments\"],\"seed\":[\"$SEED\"]}"
-          scripts/ssm-run.sh
-          # Counts and the synthetic tracking numbers only; safe to show.
+          status=0
+          scripts/ssm-run.sh || status=$?
+          # Counts and the synthetic tracking numbers only; safe to show, and shown even when a
+          # host failed, so that what the hosts that did finish removed is on the page.
           grep -E '^(RESET_DATA |SEEDED )' "$OUTPUT_FILE" | tee -a "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
