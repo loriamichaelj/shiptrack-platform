@@ -121,7 +121,7 @@ resource "aws_kms_key" "data" {
   #checkov:skip=CKV_AWS_109: the policy delegates to IAM for the account; access is granted by IAM policies (design §6.3)
   #checkov:skip=CKV_AWS_111: the policy delegates to IAM for the account; access is granted by IAM policies (design §6.3)
   #checkov:skip=CKV2_AWS_64: the key policy is defined, and delegates to IAM for the account
-  description             = "ShipTrack data: RDS storage and the POD bucket"
+  description             = "ShipTrack data: RDS storage and the proof-of-delivery bucket"
   enable_key_rotation     = true
   deletion_window_in_days = var.deletion_window_in_days
   policy                  = data.aws_iam_policy_document.root_delegation.json

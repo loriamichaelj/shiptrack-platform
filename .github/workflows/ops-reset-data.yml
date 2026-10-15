@@ -76,7 +76,7 @@ jobs:
           MAX_CONCURRENCY: "1"
           TIMEOUT_SECONDS: "900"
         run: |
-          # The document's podBucket defaults to the POD bucket, so the bucket name is not handled here.
+          # The document's podBucket defaults to the proof-of-delivery bucket, so the bucket name is not handled here.
           export PARAMETERS="{\"confirm\":[\"delete-all-shipments\"],\"seed\":[\"$SEED\"]}"
           status=0
           scripts/ssm-run.sh || status=$?

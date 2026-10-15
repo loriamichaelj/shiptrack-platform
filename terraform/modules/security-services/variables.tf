@@ -36,7 +36,7 @@ variable "sns_sev2_arn" {
 }
 
 variable "enable_pod_data_events" {
-  description = "Record S3 data events for the POD bucket (billed per event)."
+  description = "Record S3 data events for the proof-of-delivery bucket (billed per event)."
   type        = bool
   default     = false
 }

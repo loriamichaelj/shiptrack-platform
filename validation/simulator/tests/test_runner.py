@@ -19,7 +19,7 @@ class FakeApi:
         self.reject_events = reject_events
         self.requests: list[httpx.Request] = []
         self.shipments = 0
-        self.pods = 0
+        self.proofs = 0
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -34,7 +34,7 @@ class FakeApi:
                 return httpx.Response(503, json={"error": {"code": "INTERNAL"}})
             return httpx.Response(202, json={"accepted": True})
         if path.endswith("/pod"):
-            self.pods += 1
+            self.proofs += 1
             return httpx.Response(201, json={})
         return httpx.Response(404)
 
@@ -80,10 +80,10 @@ def test_duplicates_reuse_the_idempotency_key(tmp_path: Path) -> None:
     assert len(keys) - len(set(keys)) == stats.duplicates_sent > 0
 
 
-def test_each_delivered_shipment_gets_one_pod_and_it_is_never_read_back(tmp_path: Path) -> None:
+def test_each_delivered_shipment_gets_one_proof_of_delivery_and_it_is_never_read_back(tmp_path: Path) -> None:
     api = FakeApi()
     plans, stats = go(tmp_path, api)
-    assert api.pods == stats.pods_uploaded == sum(p.delivers for p in plans)
+    assert api.proofs == stats.proofs_uploaded == sum(p.delivers for p in plans)
     assert not [r for r in api.requests if r.method == "GET"]
 
 

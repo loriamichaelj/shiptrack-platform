@@ -39,7 +39,7 @@ SHIPMENT_KEYS = {
 }
 TRACK_VIEW_KEYS = {"tracking_number", "carrier_code", "status", "estimated_delivery_at", "delivered_at", "events"}
 TRACK_EVENT_KEYS = {"event_type", "location", "occurred_at"}
-POD_KEYS = {"document_id", "shipment_id", "content_type", "size_bytes", "sha256", "uploaded_at"}
+PROOF_OF_DELIVERY_KEYS = {"document_id", "shipment_id", "content_type", "size_bytes", "sha256", "uploaded_at"}
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ def load_settings() -> Settings:
         token=os.environ.get("TEST_TOKEN", ""),
         carrier_code=os.environ.get("CARRIER_CODE", "ZZTEST"),
         # Set when BASE_URL points straight at one stack and not at the ALB, so nothing can route a
-        # request to the other stack. It lets the POD tests run without a pinned target.
+        # request to the other stack. It lets the proof-of-delivery tests run without a pinned target.
         single_stack=os.environ.get("SINGLE_STACK", "") == "1",
     )
 
@@ -97,7 +97,7 @@ def make_client(settings: Settings, *, target: str | None = None) -> httpx.Clien
         headers["X-ShipTrack-Test-Token"] = settings.token
 
     def strip_routing_headers_off_site(request: httpx.Request) -> None:
-        # modern answers a POD download with a redirect to a presigned URL; the token must not follow.
+        # modern answers a proof-of-delivery download with a redirect to a presigned URL; the token must not follow.
         if request.url.host != settings.host.split(":")[0]:
             for name in [h for h in request.headers if h.lower().startswith("x-shiptrack-")]:
                 del request.headers[name]

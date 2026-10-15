@@ -46,7 +46,7 @@ Platform publishes its outputs as an **SSM Parameter Store contract** (§6.9). A
 - Network: VPC, subnets, NAT, VPC endpoints, flow logs, shared security groups
 - KMS keys for data, secrets, and logs
 - RDS PostgreSQL, database credentials, DB bootstrap SQL and runbook
-- POD (proof-of-delivery) S3 bucket and log buckets
+- Proof-of-delivery S3 bucket and log buckets
 - Ingress: ALB, listeners, both target groups, weighted, header, and path routing
 - Account security services: CloudTrail, GuardDuty, AWS Config, Security Hub CSPM, Inspector, IAM Access Analyzer
 - Shared observability: SNS alert topics, ALB/RDS alarms, cutover dashboard
@@ -105,7 +105,7 @@ Default region is the `aws_region` variable (default `us-east-1`).
                         │ RDS PostgreSQL   │  KMS: shiptrack-data
                         └──────────────────┘
 
-  Shared: S3 POD bucket · Secrets Manager (db/app, db/migrator) · KMS ×3
+  Shared: S3 proof-of-delivery bucket · Secrets Manager (db/app, db/migrator) · KMS ×3
           CloudTrail · GuardDuty · Config · Security Hub CSPM · Inspector
           SNS sev1/sev2 · cutover dashboard · SSM contract /shiptrack/platform/*
 ```
@@ -267,7 +267,7 @@ The org name, repo names, environment name, and role prefix are variables. The p
 
 | Alias | Used for | Key policy notes |
 |---|---|---|
-| `alias/shiptrack-data` | RDS storage, POD bucket | Root delegation to IAM; services via `kms:ViaService` |
+| `alias/shiptrack-data` | RDS storage, proof-of-delivery bucket | Root delegation to IAM; services via `kms:ViaService` |
 | `alias/shiptrack-secrets` | Secrets Manager (DB secrets, RDS master secret) | Root delegation to IAM |
 | `alias/shiptrack-logs` | CloudWatch Logs, SNS, CloudTrail | Grant `logs.<region>.amazonaws.com` with the `kms:EncryptionContext:aws:logs:arn` condition; grant `cloudwatch.amazonaws.com` and `sns.amazonaws.com` for encrypted alarm topics; grant `cloudtrail.amazonaws.com`; grant `events.amazonaws.com` (EventBridge publishes Security Hub findings to the encrypted SNS topic); grant `config.amazonaws.com` with `aws:SourceAccount` (AWS Config delivers to the CloudTrail bucket) |
 
@@ -316,7 +316,7 @@ All keys have rotation enabled and a 30-day deletion window. Workload roles in o
 
 ### 6.5 Storage (`modules/storage`)
 
-**POD bucket** `shiptrack-pod-<account_id>-<region>`
+**Proof-of-delivery bucket** `shiptrack-pod-<account_id>-<region>`
 - Block Public Access, `BucketOwnerEnforced`, versioning on
 - SSE-KMS (`shiptrack-data`) **with S3 Bucket Keys enabled** (reduces KMS request cost; optimization **O-P4**)
 - Policy denies non-TLS requests. **Do not** add a "deny `PutObject` without the `x-amz-server-side-encryption` header" statement: it rejects clients that rely on bucket default encryption, which already enforces SSE-KMS. If an explicit guard is wanted, deny only when the header is present **and** names a different key.
@@ -400,7 +400,7 @@ variable "cutover" {
 
 ### 6.7 Security services (`modules/security-services`)
 
-- **CloudTrail:** multi-region trail, log-file validation, KMS (`shiptrack-logs`), management events. S3 data events only for the POD bucket, behind `enable_pod_data_events` (default `false`, cost).
+- **CloudTrail:** multi-region trail, log-file validation, KMS (`shiptrack-logs`), management events. S3 data events only for the proof-of-delivery bucket, behind `enable_pod_data_events` (default `false`, cost).
 - **GuardDuty:** detector with S3 Protection, EKS Audit Log Monitoring, RDS Protection, and Runtime Monitoring for EKS with automated agent management. Runtime Monitoring is billed per vCPU; it sits behind `enable_guardduty_runtime` (default `true`).
 - **AWS Config:** recorder and delivery channel (CloudTrail bucket, `config/` prefix). This is required for Security Hub controls. Use `recording_mode` with **DAILY** frequency by default, and **CONTINUOUS** overrides for `AWS::IAM::*` and `AWS::EC2::SecurityGroup` (cost control).
 - **Security Hub CSPM:** enable standards *AWS Foundational Security Best Practices* and *CIS AWS Foundations Benchmark v3.0* with the `aws_securityhub_*` resources (these manage CSPM). Context: in 2025 AWS renamed the original Security Hub to **Security Hub CSPM** and launched a new unified **Security Hub** (GA December 2025) that correlates CSPM, GuardDuty, and Inspector findings in OCSF format with consolidated pricing. The unified Security Hub is **out of scope**; everything here, including EventBridge routing, uses CSPM's ASFF findings. **[VERIFY the CIS v3.0 standard ARN in the chosen region.]**
@@ -500,9 +500,9 @@ These tools own the **shared definition of correct** for both stacks.
   - `TEST_TOKEN` (sets `X-ShipTrack-Test-Token`; CI reads it from `test_token_secret_arn`)
   - `CARRIER_CODE` (default `ZZTEST`)
 - Error codes: `QUEUE_UNAVAILABLE` (503, events endpoint) is accepted only when `X-ShipTrack-Stack: modern`; `INJECTED_FAULT` is always a failure.
-- POD tests (upload, then read back) require `TARGET` ≠ `none`, so both calls hit one stack. Unpinned weighted traffic could upload to legacy and read through modern inside the PodSync window (legacy §8).
+- Proof-of-delivery tests (upload, then read back) require `TARGET` ≠ `none`, so both calls hit one stack. Unpinned weighted traffic could upload to legacy and read through modern inside the proof-of-delivery sync window (legacy §8).
 - Each test creates its own data with unique tracking numbers. Tests are safe to run against the live environment, with test data isolated under carrier `ZZTEST`.
-- Follow redirects (modern answers POD downloads with 302 to a presigned URL). Strip `X-ShipTrack-*` headers on cross-origin redirects so the token is not sent to S3.
+- Follow redirects (modern answers proof-of-delivery downloads with 302 to a presigned URL). Strip `X-ShipTrack-*` headers on cross-origin redirects so the token is not sent to S3.
 - When `TARGET` is not `none`, every ALB response must carry `X-ShipTrack-Stack` equal to `TARGET`; otherwise fail with a message that names routing fall-through as the cause.
 - **UI checks** (marker `ui`, included in `smoke`):
   - `GET /ui/` returns 200 `text/html` containing `<div id="root">`, with `Cache-Control: no-cache`.
@@ -517,7 +517,7 @@ These tools own the **shared definition of correct** for both stacks.
 **`simulator/`** (async Python, httpx)
 - Creates N shipments across carriers, then emits each lifecycle (`PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED`) with realistic jitter.
 - Injects 1% duplicate events (same `Idempotency-Key`), 2% out-of-order events, and 1% `EXCEPTION` paths.
-- Uploads a small generated PNG/PDF POD on delivery. It never reads PODs back through weighted routing (see the POD-test rule under `contract/`); k6 does not either.
+- Uploads a small generated PNG/PDF proof of delivery for each delivered shipment. It never reads proofs of delivery back through weighted routing (see the proof-of-delivery test rule under `contract/`); k6 does not either.
 - Creates 5% of shipments with `promised_delivery_at` already in the past, to trigger the SLA scanner.
 - **Ledger:** writes every accepted event's idempotency key to `results/sent-<ts>.jsonl`. `simulator verify --ledger … --db-url …` reports events accepted but never persisted. RDS is private, so `verify` runs on a host inside the VPC through an SSM document dispatched by a workflow (§6.4, *DB access from workflows*); the workflow first uploads the ledger and the simulator package to the artifact bucket. This is how legacy AP-06 (lost events) is proven.
 
@@ -629,7 +629,7 @@ Weight steps: Wave 1 `track` 10 → 50 → 100 (moves `/api/v1/track/*` and `/ui
 | AWS Config | recording frequency | DAILY | Per configuration item recorded |
 | GuardDuty Runtime | `enable_guardduty_runtime` | true | Per vCPU monitored |
 | CloudWatch Logs | retention per group | 14 d | Ingestion is the big cost; retention controls storage (O-P3) |
-| S3 POD | lifecycle + Bucket Keys | on | O-P4 |
+| S3 proof of delivery | lifecycle + Bucket Keys | on | O-P4 |
 
 **[VERIFY]** all prices in the AWS Pricing Calculator for the chosen region. Do not hardcode prices in code or docs. Cite the calculator export instead.
 

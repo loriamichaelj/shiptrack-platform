@@ -100,7 +100,7 @@ that restores the previous line, or `ops-rollback-cutover.yml` first and the pul
 ### Wave 2: write path
 
 Entry: wave 1 at 100%; legacy v1.1.0 deployed; `migrate_pod_to_s3.py` run on both legacy hosts; the
-PodSync cron installed; the G-POD count is 0; legacy change freeze on (modern design §9.2). The
+proof-of-delivery sync cron installed; the G-POD count is 0; legacy change freeze on (modern design §9.2). The
 legacy evidence tooling for G-POD and the ledger check is part of legacy L5 and L6, and is not built
 yet: do not start wave 2 without it.
 
@@ -112,9 +112,9 @@ yet: do not start wave 2 without it.
 | 2d | legacy 0, modern 100 | `-  default = { legacy = 50, modern = 50 }` / `+  default = { legacy = 0, modern = 100 }` |
 
 `track` stays `{ legacy = 0, modern = 100 }`. Gates G1 to G5 each step, plus the simulator ledger
-shows 0 lost events for modern-routed traffic, and no `pod_not_migrated` for a POD older than 5
+shows 0 lost events for modern-routed traffic, and no `pod_not_migrated` for a proof of delivery older than 5
 minutes. Rollback: restore the previous weights, and keep modern's workers running until its events
-queue drains. S3 PODs stay readable by legacy v1.1.0.
+queue drains. S3 proofs of delivery stay readable by legacy v1.1.0.
 
 ### Handoff: schema ownership
 

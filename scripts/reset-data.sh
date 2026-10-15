@@ -3,7 +3,7 @@
 # Run by the ShipTrack-ResetData SSM document on each legacy host in turn (ADR-0034); the document
 # writes db/reset-data.sql to $RESET_DATA_SQL first. The database is private, and a legacy host is
 # the one place a workflow can reach it from (legacy ADR-0011).
-# Usage: reset-data.sh <delete-all-shipments> <pod-bucket> <yes|no>
+# Usage: reset-data.sh <delete-all-shipments> <proof-of-delivery-bucket> <yes|no>
 #
 # In this order, so that a failure leaves the database and the files agreeing as far as possible:
 #   1. the database, in one transaction, as the application role;
@@ -21,9 +21,9 @@ set -euo pipefail
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
-confirm=${1:?usage: reset-data.sh <delete-all-shipments> <pod-bucket> <yes|no>}
-bucket=${2:?usage: reset-data.sh <delete-all-shipments> <pod-bucket> <yes|no>}
-seed=${3:?usage: reset-data.sh <delete-all-shipments> <pod-bucket> <yes|no>}
+confirm=${1:?usage: reset-data.sh <delete-all-shipments> <proof-of-delivery-bucket> <yes|no>}
+bucket=${2:?usage: reset-data.sh <delete-all-shipments> <proof-of-delivery-bucket> <yes|no>}
+seed=${3:?usage: reset-data.sh <delete-all-shipments> <proof-of-delivery-bucket> <yes|no>}
 
 [[ "$confirm" == delete-all-shipments ]] || die "refused: the first argument must be delete-all-shipments"
 [[ "$bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || die "invalid bucket name"

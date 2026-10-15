@@ -15,7 +15,7 @@ markers = [
     "smoke: fast post-deploy subset; creates at most one ZZTEST shipment",
     "full: everything",
     "ui: checks of the served UI shell and its assets (included in smoke)",
-    "pod: proof-of-delivery upload and read-back; needs one pinned stack",
+    "proof_of_delivery: proof-of-delivery upload and read-back; needs one pinned stack",
     "sla: waits for the SLA scan (up to 12 minutes); run by contract-sla and left out of contract-full",
 ]
 
