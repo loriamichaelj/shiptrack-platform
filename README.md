@@ -409,6 +409,44 @@ flowchart TB
     helm -. "scales and routes" .-> ns
 ```
 
+#### The UI in the browser
+
+The UI is a single-page app that the `api` pods serve under `/ui/`. It calls only the public API, and
+one runtime above the router is shared by every page. Legacy's UI is a separate, minimal tracking page
+served by nginx and is not changed.
+
+```mermaid
+flowchart TB
+    browser(["Browser at /ui/"])
+
+    subgraph served["Served by the api pods, strict CSP, no inline script or style"]
+        shell["index.html, no-cache<br/>hashed assets, immutable"]
+    end
+
+    subgraph app["React app"]
+        chrome["Header: navigation, LIVE pill, API activity<br/>Footer: stack badge"]
+        pages["Pages: Live, Track, Browse,<br/>New shipment, Shipment, System"]
+        subgraph runtime["One runtime above the router"]
+            engine["TrafficEngine<br/>1 to 20 per second, 8 in flight,<br/>stops after an hour or 1,000 created"]
+            store["ShipmentStore<br/>one copy of the shipments,<br/>a status never moves backwards"]
+            sync["Server sync<br/>every page of the list,<br/>15 s on Browse, 30 s on Track"]
+        end
+        log["API call log<br/>latest 200 calls, totals counted apart"]
+    end
+
+    api["Public API, unchanged<br/>shipments, events, track,<br/>proof of delivery, healthz, readyz"]
+
+    browser --> shell --> app
+    engine --> store
+    sync --> store
+    store --> pages
+    engine -- "create, event, read" --> api
+    sync -- "GET shipments, cursor pages" --> api
+    pages -- "forms, track, proof of delivery" --> api
+    api -. "every call is recorded" .-> log
+    log -.-> chrome
+```
+
 #### Event ingestion, before and after
 
 Legacy answers `202` before the event is stored, so a restart loses what is in the queue (AP-06).
@@ -539,16 +577,20 @@ Actions list sorts by what a workflow does.
 
 ## Opening both UIs side by side
 
-The ALB's address serves legacy: the weighted rules send all traffic to it until the cutover moves
-weights. To open the modern UI beside it without the test-routing headers, set the `PREVIEW_CIDRS`
-repository **secret** to a JSON list of the addresses that may reach it, for example
+Modern serves the main address: the weighted rules send all traffic to it. Legacy stays running as a
+fallback, and its UI is reachable beside modern's without the test-routing headers. Set the
+`PREVIEW_CIDRS` repository **secret** to a JSON list of the addresses that may reach it, for example
 `["203.0.113.7/32"]`, and run `apply-terraform`. That adds a listener on port 8080 that forwards
-everything to one stack: modern while legacy takes the traffic, and legacy after the cutover
-(`preview_stack`, ADR-0032), so legacy's UI stays reachable beside modern's. Then:
+everything to one stack (`preview_stack`, ADR-0032): legacy now, and modern while legacy took the
+traffic. Then:
 
-- legacy: `http://<ALB address>/ui/`
-- modern: `http://<ALB address>:8080/ui/`
+- modern: `http://<ALB address>/ui/`
+- legacy: `http://<ALB address>:8080/ui/`
 - Grafana, on modern's metrics: `http://<ALB address>:3000/` (ADR-0035)
+
+The two UIs are different builds of the same API. Legacy's is a minimal tracking page: search, status,
+and event timeline. Modern's adds live traffic, browse, new shipment, shipment detail with events and
+proof of delivery, and a system page (see the `shiptrack-modern` README).
 
 It is a secret, not a variable, because it names a person's address and the logs and pull request
 comments of this repository are public: a secret is masked in logs, and the plan prints the rules
