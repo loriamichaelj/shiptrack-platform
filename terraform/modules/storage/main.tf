@@ -1,4 +1,4 @@
-# The POD, ALB access-log, and CloudTrail buckets (design §6.5). Every bucket blocks public access,
+# The proof-of-delivery, ALB access-log, and CloudTrail buckets (design §6.5). Every bucket blocks public access,
 # enforces bucket-owner ownership, and refuses requests that are not over TLS.
 
 data "aws_caller_identity" "current" {}
@@ -16,7 +16,7 @@ locals {
 
 resource "aws_s3_bucket" "pod" {
   #checkov:skip=CKV_AWS_18: server access logging is not part of the design; object access is audited through CloudTrail
-  #checkov:skip=CKV2_AWS_62: event notifications are not needed for the POD bucket
+  #checkov:skip=CKV2_AWS_62: event notifications are not needed for the proof-of-delivery bucket
   #checkov:skip=CKV_AWS_144: cross-region replication is out of scope (design §2, no multi-region DR)
   bucket = "${var.name_prefix}-pod-${local.suffix}"
 }

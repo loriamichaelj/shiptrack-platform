@@ -26,7 +26,7 @@ run "it_refuses_without_the_typed_confirmation" {
   }
 }
 
-run "the_bucket_defaults_to_the_pod_bucket_and_the_seed_is_yes_or_no" {
+run "the_bucket_defaults_to_the_proof_of_delivery_bucket_and_the_seed_is_yes_or_no" {
   command = plan
 
   assert {
@@ -34,7 +34,7 @@ run "the_bucket_defaults_to_the_pod_bucket_and_the_seed_is_yes_or_no" {
       jsondecode(aws_ssm_document.reset_data.content).parameters.podBucket.default == "shiptrack-pod-test"
       && jsondecode(aws_ssm_document.reset_data.content).parameters.seed.allowedValues == ["yes", "no"]
     )
-    error_message = "podBucket must default to the POD bucket, and seed must be yes or no."
+    error_message = "podBucket must default to the proof-of-delivery bucket, and seed must be yes or no."
   }
 }
 

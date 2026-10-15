@@ -42,7 +42,7 @@ run "the_trail_follows_the_design" {
   }
 }
 
-run "pod_data_events_when_enabled" {
+run "proof_of_delivery_data_events_when_enabled" {
   command = plan
 
   variables {
@@ -57,7 +57,7 @@ run "pod_data_events_when_enabled" {
         anytrue([for f in s.field_selector : f.field == "resources.ARN" && try(contains(tolist(f.starts_with), "arn:aws:s3:::shiptrack-pod-mock/"), false)])
       ]),
     ])
-    error_message = "The data-event selector is limited to objects in the POD bucket."
+    error_message = "The data-event selector is limited to objects in the proof-of-delivery bucket."
   }
 }
 

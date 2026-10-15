@@ -37,6 +37,9 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0031 | `g3-per-route-with-an-event-route-allowance` | Accepted |
 | 0032 | `legacy-kept-reachable-on-the-preview-port` | Accepted |
 | 0033 | `retire-ui-build-parity-gate` | Accepted |
+| 0034 | `data-reset-by-gated-workflow` | Accepted |
+| 0035 | `grafana-on-the-preview-addresses` | Accepted |
+| 0036 | `proof-of-delivery-naming` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -280,7 +283,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Context:** P4 turns on the account-level security services. Several details were left open, and some of the provider's resources do not match the design's wording.
 
 **Decision:**
-- The CloudTrail trail uses advanced event selectors for management events and, behind `enable_pod_data_events`, for S3 data events limited to objects in the POD bucket. Classic and advanced selectors cannot be mixed.
+- The CloudTrail trail uses advanced event selectors for management events and, behind `enable_pod_data_events`, for S3 data events limited to objects in the proof-of-delivery bucket. Classic and advanced selectors cannot be mixed.
 - GuardDuty Runtime Monitoring is the `RUNTIME_MONITORING` feature with the `EKS_ADDON_MANAGEMENT` additional configuration, which is the automated agent management the design asks for. `EKS_RUNTIME_MONITORING` is the deprecated name **[VERIFY]**.
 - AWS Config records daily with continuous overrides for IAM roles, policies, users, groups, and security groups. It uses a role named under the role prefix, not the service-linked role, so the first apply does not depend on whether that service-linked role already exists. The role may write only under `config/AWSLogs/<account>/Config/` in the CloudTrail bucket, and the bucket policy allows that path.
 - Security Hub CSPM subscribes only to AWS Foundational Security Best Practices v1.0.0 and CIS AWS Foundations Benchmark v3.0.0. The CIS ARN is built for the configured region **[VERIFY at first apply]**.
@@ -356,7 +359,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Context:** P6b and P7 add the contract suite, the k6 scenarios, and the workflows that run them and watch for drift. The simulator is already recorded in ADR-0023. Several details were left open, and by the time these landed other changes had added state the workflows have to agree with.
 
 **Decision:**
-- The contract suite is checked against the real legacy application, not only by reading the spec: it was run against a local instance and found the real behaviour (a malformed shipment id is a plain 404, an over-long idempotency key is a 422 validation error, event ingestion is asynchronous so the suite polls the track view). `SINGLE_STACK=1` lets the POD tests run when `BASE_URL` points straight at one stack and not at the ALB; without it they need `TARGET` set, as the design requires.
+- The contract suite is checked against the real legacy application, not only by reading the spec: it was run against a local instance and found the real behaviour (a malformed shipment id is a plain 404, an over-long idempotency key is a 422 validation error, event ingestion is asynchronous so the suite polls the track view). `SINGLE_STACK=1` lets the proof-of-delivery tests run when `BASE_URL` points straight at one stack and not at the ALB; without it they need `TARGET` set, as the design requires.
 - A test fails if any endpoint in the legacy §3.4 table has no test, so the suite cannot quietly fall behind the spec.
 - Modern's `deploy-app.yml` consumes the suite as `cd validation/contract && TARGET=modern uv run --frozen pytest -m smoke`, with `BASE_URL` and `TEST_TOKEN` from the environment, so the `smoke` marker, the lockfile, and those variable names are an interface and change only together.
 - `check-live-stack.yml` adds a fourth suite, `contract-ui-parity`, for cutover gate G6, and runs `contract-full` without the parity tests, which need both stacks. It uploads nothing: a failure message can contain the ALB address, which is masked in the log but not in a file.
@@ -474,3 +477,13 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 - It is outside the cutover weights and never touches the weighted rules.
 
 **Consequences:** One more port is open to the named addresses, and anyone who can send from one of them can read the metrics and use Grafana's query explorer. A path between the owner and the ALB can read them too, which is the same exposure as the preview port. Removing the `PREVIEW_CIDRS` secret and applying removes the listener and its rules; the target group stays. If a custom domain arrives, this listener should move to HTTPS with the rest.
+
+## ADR-0036: proof-of-delivery-naming
+
+**Status:** Accepted
+
+**Context:** The abbreviation POD names the document a carrier produces when a shipment is delivered, and it is also the usual short form of a Kubernetes pod. Both meanings occur in this repository, in the same documents: the proof-of-delivery bucket and the contract suite's upload tests on one side, modern's pods, pod restarts, and Pod Identity on the other.
+
+**Decision:** A proof of delivery is the file a carrier uploads with `POST /api/v1/shipments/{id}/pod`, kept in the proof-of-delivery bucket under `pod/`. It is written "proof of delivery" in prose, comments, descriptions, and messages, and "proof-of-delivery" when it qualifies a noun. Code and test names say `proof_of_delivery`, including the contract suite's pytest marker and the simulator's module and counters. A pod, never abbreviated to POD, is only a Kubernetes pod: `pod restarts`, `pod-restarts` alarms, and `pods.eks.amazonaws.com` keep that meaning. Names that stored data, other repositories, or deployed resources depend on are kept: the `pod_bucket_name` and `pod_bucket_arn` contract keys and the module outputs behind them, the `<name_prefix>-pod-<account>-<region>` bucket and the `aws_s3_bucket.pod` resource addresses, the `pod/` key prefix, the `pod_retention_days` and `enable_pod_data_events` variables, the `podBucket` parameter of `ShipTrack-ResetData`, the `pod_documents` table the reset script deletes from, the `POD_DIR` test variable, and the gate id `G-POD`, which reads as the proof-of-delivery gate.
+
+**Consequences:** No behavior, state address, contract key, or workflow name changes. The one resource change is the description of the data KMS key, which updates in place, and the apply that follows the merge is otherwise a no-op. The kept names still contain `pod`; in this repository `pod` means proof of delivery everywhere except in `pod-restarts`, pod restart gates, and Pod Identity, which are Kubernetes. The simulator's summary line now reads `proofs uploaded`.

@@ -47,7 +47,7 @@ resource "aws_cloudtrail" "this" {
     for_each = var.enable_pod_data_events ? [1] : []
 
     content {
-      name = "S3 data events for the POD bucket"
+      name = "S3 data events for the proof-of-delivery bucket"
 
       field_selector {
         field  = "eventCategory"

@@ -58,7 +58,7 @@ run "every_bucket_is_locked_down" {
   }
 }
 
-run "pod_bucket_encryption_and_versioning" {
+run "proof_of_delivery_bucket_encryption_and_versioning" {
   command = plan
 
   assert {
@@ -67,12 +67,12 @@ run "pod_bucket_encryption_and_versioning" {
       one(one(aws_s3_bucket_server_side_encryption_configuration.pod.rule).apply_server_side_encryption_by_default).sse_algorithm == "aws:kms",
       one(one(aws_s3_bucket_server_side_encryption_configuration.pod.rule).apply_server_side_encryption_by_default).kms_master_key_id == var.data_key_arn,
     ])
-    error_message = "The POD bucket uses SSE-KMS with the data key and S3 Bucket Keys."
+    error_message = "The proof-of-delivery bucket uses SSE-KMS with the data key and S3 Bucket Keys."
   }
 
   assert {
     condition     = one(aws_s3_bucket_versioning.pod.versioning_configuration).status == "Enabled"
-    error_message = "The POD bucket must be versioned."
+    error_message = "The proof-of-delivery bucket must be versioned."
   }
 }
 
@@ -90,7 +90,7 @@ run "log_bucket_encryption" {
   }
 }
 
-run "pod_lifecycle_follows_the_design" {
+run "proof_of_delivery_lifecycle_follows_the_design" {
   command = plan
 
   assert {
@@ -100,7 +100,7 @@ run "pod_lifecycle_follows_the_design" {
       anytrue([for r in aws_s3_bucket_lifecycle_configuration.pod.rule : r.id == "expire-noncurrent-versions" && one(r.noncurrent_version_expiration).noncurrent_days == 30]),
       anytrue([for r in aws_s3_bucket_lifecycle_configuration.pod.rule : r.id == "abort-incomplete-uploads" && one(r.abort_incomplete_multipart_upload).days_after_initiation == 7]),
     ])
-    error_message = "POD lifecycle: IA at 30 d, Glacier IR at 90 d, expire at the retention, noncurrent at 30 d, multipart at 7 d."
+    error_message = "Proof-of-delivery lifecycle: IA at 30 d, Glacier IR at 90 d, expire at the retention, noncurrent at 30 d, multipart at 7 d."
   }
 }
 

@@ -5,7 +5,7 @@ variable "name_prefix" {
 }
 
 variable "data_key_arn" {
-  description = "ARN of the data key that encrypts the POD bucket."
+  description = "ARN of the data key that encrypts the proof-of-delivery bucket."
   type        = string
 }
 

@@ -11,7 +11,7 @@ import httpx
 
 from .ledger import Ledger, LedgerEntry, now_iso
 from .plan import PlannedEvent, ShipmentPlan
-from .pod import make_pod
+from .proof_of_delivery import make_proof_of_delivery
 
 
 @dataclass
@@ -24,8 +24,8 @@ class Stats:
     out_of_order_sent: int = 0
     exception_paths: int = 0
     late_shipments: int = 0
-    pods_uploaded: int = 0
-    pods_failed: int = 0
+    proofs_uploaded: int = 0
+    proofs_failed: int = 0
     errors: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -36,7 +36,7 @@ class Stats:
             f"out-of-order sends     {self.out_of_order_sent}",
             f"exception paths        {self.exception_paths}",
             f"created already late   {self.late_shipments}",
-            f"PODs uploaded          {self.pods_uploaded} ({self.pods_failed} failed)",
+            f"proofs uploaded        {self.proofs_uploaded} ({self.proofs_failed} failed)",
         ]
         return "\n".join(lines)
 
@@ -132,20 +132,20 @@ async def _run_shipment(
             await asyncio.sleep(delay)
 
     if plan.delivers:
-        content, content_type = make_pod(rng, f"{run_id}-{shipment['tracking_number']}")
+        content, content_type = make_proof_of_delivery(rng, f"{run_id}-{shipment['tracking_number']}")
         try:
-            pod = await client.post(
-                f"/api/v1/shipments/{shipment['id']}/pod", files={"file": ("pod", content, content_type)}
+            proof = await client.post(
+                f"/api/v1/shipments/{shipment['id']}/pod", files={"file": ("proof", content, content_type)}
             )
         except httpx.HTTPError as error:
-            stats.pods_failed += 1
-            stats.errors.append(f"pod upload failed: {type(error).__name__}")
+            stats.proofs_failed += 1
+            stats.errors.append(f"proof-of-delivery upload failed: {type(error).__name__}")
             return
-        if pod.status_code == 201:
-            stats.pods_uploaded += 1
+        if proof.status_code == 201:
+            stats.proofs_uploaded += 1
         else:
-            stats.pods_failed += 1
-            stats.errors.append(f"pod not accepted: HTTP {pod.status_code}")
+            stats.proofs_failed += 1
+            stats.errors.append(f"proof of delivery not accepted: HTTP {proof.status_code}")
 
 
 async def run(

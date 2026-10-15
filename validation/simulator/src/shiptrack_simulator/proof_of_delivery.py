@@ -11,7 +11,7 @@ _PNG = base64.b64decode(
 )
 
 
-def make_pod(rng: random.Random, serial: str) -> tuple[bytes, str]:
+def make_proof_of_delivery(rng: random.Random, serial: str) -> tuple[bytes, str]:
     """A tiny PNG or PDF with a serial in it so that no two files are identical."""
     if rng.random() < 0.5:
         return _PNG + b"\0" + serial.encode(), "image/png"

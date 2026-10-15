@@ -1,5 +1,5 @@
 """Proof of delivery: upload, then read back. Both calls must reach one stack, because unpinned
-weighted traffic could upload to legacy and read through modern inside the PodSync window (legacy
+weighted traffic could upload to legacy and read through modern inside the proof-of-delivery sync window (legacy
 design section 8). Run with TARGET set to a stack, or SINGLE_STACK=1 when BASE_URL is one stack."""
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ import uuid
 import httpx
 import pytest
 
-from support import POD_KEYS, Settings, assert_error
+from support import PROOF_OF_DELIVERY_KEYS, Settings, assert_error
 
-pytestmark = pytest.mark.pod
+pytestmark = pytest.mark.proof_of_delivery
 
 # A one-pixel PNG, a minimal PDF, and the smallest JPEG header: enough for a content-type check.
 PNG = base64.b64decode(
@@ -28,7 +28,7 @@ TEN_MIB = 10 * 1024 * 1024
 @pytest.fixture(autouse=True)
 def _require_one_stack(settings: Settings) -> None:
     if settings.target == "none" and not settings.single_stack:
-        pytest.skip("POD tests need TARGET=legacy|modern (or SINGLE_STACK=1 when BASE_URL is one stack)")
+        pytest.skip("proof-of-delivery tests need TARGET=legacy|modern (or SINGLE_STACK=1 when BASE_URL is one stack)")
 
 
 def upload(client: httpx.Client, shipment_id: str, content: bytes, content_type: str) -> httpx.Response:
@@ -49,7 +49,7 @@ def test_upload_then_read_back(client: httpx.Client, shipment: dict, content: by
     response = upload(client, shipment["id"], content, content_type)
     assert response.status_code == 201, response.text[:200]
     body = response.json()
-    assert set(body) == POD_KEYS
+    assert set(body) == PROOF_OF_DELIVERY_KEYS
     assert body["shipment_id"] == shipment["id"]
     assert body["content_type"] == content_type
     assert body["size_bytes"] == len(content)
