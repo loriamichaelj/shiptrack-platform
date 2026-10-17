@@ -30,6 +30,20 @@ def build_parser() -> argparse.ArgumentParser:
     verify = commands.add_parser("verify", help="report accepted events that were never persisted")
     verify.add_argument("--ledger", type=Path, required=True)
     verify.add_argument("--db-url", default=os.environ.get("DATABASE_URL"), help="default: $DATABASE_URL")
+    verify.add_argument(
+        "--base-url",
+        default=None,
+        help="check through the API's tracking timelines instead of the database (no database access needed)",
+    )
+    verify.add_argument(
+        "--target", default=os.environ.get("TARGET", "none"), choices=["legacy", "modern", "none"]
+    )
+    verify.add_argument(
+        "--wait",
+        type=float,
+        default=0.0,
+        help="with --base-url, keep looking for missing events this many seconds (workers apply late)",
+    )
     return parser
 
 
@@ -63,12 +77,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {error}", file=sys.stderr)
         return 0 if stats.shipments_failed == 0 else 1
 
-    if not args.db_url:
-        print("--db-url or DATABASE_URL is required", file=sys.stderr)
-        return 2
-    from .verify import verify_ledger  # psycopg is imported only for `verify`
+    if args.base_url:
+        from .verify import verify_ledger_api
 
-    result = verify_ledger(args.ledger, args.db_url)
+        result = verify_ledger_api(
+            args.ledger,
+            args.base_url,
+            target=args.target,
+            token=os.environ.get("TEST_TOKEN", ""),
+            wait_seconds=args.wait,
+        )
+    else:
+        if not args.db_url:
+            print("--db-url or DATABASE_URL, or --base-url, is required", file=sys.stderr)
+            return 2
+        from .verify import verify_ledger  # psycopg is imported only for `verify`
+
+        result = verify_ledger(args.ledger, args.db_url)
     print(result.report())
     return 0 if result.ok else 1
 
