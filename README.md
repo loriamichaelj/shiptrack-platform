@@ -15,10 +15,6 @@ for both.
 assumes an OIDC role, with a reviewer approving each apply. And this repository is public, so no account
 ID, ALB address, host ID, or secret value is ever committed; `ci-scrub.yml` fails a pull request that adds one.
 
-**Terms.** A *proof of delivery* is the document a carrier produces when a shipment is delivered. A *pod* is
-only ever a Kubernetes pod. Names that stored data and the contract depend on, such as `pod_bucket_name`
-and the `/pod` API paths, keep the old abbreviation.
-
 ## The migration
 
 | Repository | Role in the migration |
