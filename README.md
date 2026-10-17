@@ -118,8 +118,45 @@ flowchart TB
     graf --> gt["tg-grafana, filled by modern's<br/>TargetGroupBinding"]
 ```
 
-More diagrams (network and data, shared services, pipeline roles, one legacy host, the cluster, the UI,
-event ingestion, observability, delivery) are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+### Network and data
+
+The private-app subnets are /20 because the VPC CNI gives every pod a VPC address. The database
+accepts connections only from the `shiptrack-db-client` security group, which both stacks attach.
+
+```mermaid
+flowchart TB
+    inet(["Internet"])
+
+    subgraph vpc["VPC, three AZs, DNS support on, default security group emptied"]
+        subgraph pub["public subnets, /24 each"]
+            alb["ALB shiptrack-alb<br/>security group shiptrack-alb"]
+            nat["NAT gateway<br/>single by default, per AZ optional"]
+        end
+        subgraph appnets["private-app subnets, /20 each"]
+            lhosts["Legacy ASG hosts<br/>shiptrack-legacy-app and db-client"]
+            nodes["EKS nodes and pods<br/>db-client"]
+        end
+        subgraph datanets["private-data subnets, /24 each"]
+            rds[("RDS PostgreSQL 17, encrypted<br/>sg shiptrack-db: 5432 from db-client only<br/>force_ssl, 7-day backups, deletion protection")]
+        end
+        s3gw["S3 gateway endpoint"]
+        flow["VPC flow logs<br/>CloudWatch, 14 days"]
+    end
+
+    inet --> alb
+    alb -- "80 / 8000" --> lhosts
+    alb --> nodes
+    lhosts -- "5432" --> rds
+    nodes -- "5432" --> rds
+    lhosts -- "egress" --> nat
+    nodes -- "egress" --> nat
+    nat --> inet
+    lhosts --> s3gw
+    nodes --> s3gw
+```
+
+More diagrams (shared services, pipeline roles, one legacy host, the cluster, the UI, event ingestion,
+observability, delivery) are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Layout
 
