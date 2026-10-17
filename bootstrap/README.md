@@ -4,7 +4,7 @@ Creates what every other pipeline needs before it can run: the Terraform state b
 the `<PREFIX>-workload-boundary` permission boundary, and the nine GitHub OIDC deploy roles.
 
 It is applied **only** by `.github/workflows/apply-bootstrap.yml`, using a seed role that you create
-by hand once. Nothing is applied from a workstation. See `docs/DESIGN.md` §6.1 for the design.
+by hand once. Nothing is applied from a workstation. See `docs/DESIGN.md` for the design.
 
 ## One-time setup
 
@@ -200,7 +200,7 @@ with S3 native lock files (`use_lockfile`; no DynamoDB).
   cancelled run): delete that one object from the bucket after confirming no run is in progress.
 - **A stuck lock on `terraform/envs/dev`** (every plan and apply fails with `Error acquiring the state
   lock`): run `ops-unlock-state.yml` with the lock ID from the error and approve the `dev` gate. It refuses
-  a lock with another ID or one younger than 30 minutes (ADR-0025).
+  a lock with another ID or one younger than 30 minutes.
 - **A role needs a new permission**: change `bootstrap/policies/` and re-run the workflow. A missing
   permission appears as `AccessDenied` in the failing pipeline, and the fix always lands here.
 
