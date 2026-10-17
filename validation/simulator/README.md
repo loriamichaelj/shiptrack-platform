@@ -29,10 +29,22 @@ uv run shiptrack-sim verify --ledger results/sent-<timestamp>.jsonl --db-url "$D
 
 ## verify
 
-`verify` reports events in the ledger that are not in `shiptrack.tracking_events`. RDS is private, so
-it runs on a host inside the VPC. It needs only `psycopg`, which the release virtualenv already has:
-install the wheel there with `--no-deps`. This is how legacy AP-06 (an in-process queue that loses
-events on restart) is proven.
+`verify` reports events in the ledger that were accepted but never stored. It can look two ways.
+
+**In the database** (`--db-url`). The database is private, so this runs on a host inside the network. It needs
+only `psycopg`, which the release virtualenv already has: install the wheel there with `--no-deps`. This is how
+legacy AP-06 (an in-process queue that loses events on restart) is proven.
+
+**Through the API** (`--base-url`). An event the API accepted appears in its shipment's tracking timeline once a
+worker has applied it, so a runner with no database access can check the same thing, for example through a
+`kubectl port-forward`. `--wait SECONDS` keeps looking for the missing events, because workers apply them
+after the API answers `202`:
+
+```sh
+uv run shiptrack-sim verify --ledger results/sent-<timestamp>.jsonl --base-url http://localhost:18000 --wait 300
+```
+
+An event is matched by its type and the time it occurred.
 
 Test data goes under whichever carriers the plan picks; the carrier `ZZTEST` is reserved for the
 contract suite. Nothing in the API deletes it: `ops-reset-data.yml` clears every shipment.
