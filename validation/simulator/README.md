@@ -46,5 +46,12 @@ uv run shiptrack-sim verify --ledger results/sent-<timestamp>.jsonl --base-url h
 
 An event is matched by its type and the time it occurred.
 
+The tracking timeline lists only events that were **applied**. The API stores every event it accepts, but an
+event that arrives out of order, or that is not a valid next step, is stored and not applied, so it is not in
+the timeline. `--base-url` therefore reports such events as missing even though they were stored (a run that sent
+19 out-of-order events reported 19 missing, and the database held all of them). Use `--db-url`, or look the
+ledger's idempotency keys up in `tracking_events` from inside the network, when the run includes out-of-order
+events, which it does by default.
+
 Test data goes under whichever carriers the plan picks; the carrier `ZZTEST` is reserved for the
 contract suite. Nothing in the API deletes it: `ops-reset-data.yml` clears every shipment.

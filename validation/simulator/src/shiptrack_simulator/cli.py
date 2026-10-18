@@ -33,7 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument(
         "--base-url",
         default=None,
-        help="check through the API's tracking timelines instead of the database (no database access needed)",
+        help=(
+            "check through the API's tracking timelines instead of the database (no database access "
+            "needed). The timeline lists applied events only, so out-of-order events show as missing"
+        ),
     )
     verify.add_argument(
         "--target", default=os.environ.get("TARGET", "none"), choices=["legacy", "modern", "none"]
