@@ -26,6 +26,10 @@ uv run shiptrack-sim verify --ledger results/sent-<timestamp>.jsonl --db-url "$D
 - Uploads a small generated PNG or PDF as the proof of delivery. It never reads one back: an upload
   and its read-back must reach the same stack, and weighted routing could split them.
 - Writes one JSON line per accepted (202) event to `results/sent-<timestamp>.jsonl`.
+- With `--retry-seconds N`, tries a request again after a connection error or a 502, 503, or 504 for up to N
+  seconds, as a client behind a load balancer or a port-forward does while pods are replaced. An event is sent
+  again with the same `Idempotency-Key`. A shipment create has no key, so a retry after a dropped connection can
+  leave one extra shipment. The default is not to retry.
 
 ## verify
 
