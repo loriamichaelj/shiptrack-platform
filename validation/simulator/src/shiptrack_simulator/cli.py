@@ -25,6 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--concurrency", type=int, default=10)
     run.add_argument("--delay", type=float, default=0.0, help="seconds to wait between events of a shipment")
     run.add_argument("--seed", type=int, default=1, help="the same seed plans the same run")
+    run.add_argument(
+        "--retry-seconds",
+        type=float,
+        default=0.0,
+        help="try a request again after a connection error or 502/503/504 for up to this long (default: 0)",
+    )
     run.add_argument("--results-dir", type=Path, default=Path("results"))
 
     verify = commands.add_parser("verify", help="report accepted events that were never persisted")
@@ -72,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
                     concurrency=args.concurrency,
                     delay=args.delay,
                     seed=args.seed,
+                    retry_seconds=args.retry_seconds,
                 )
             )
         print(stats.summary())

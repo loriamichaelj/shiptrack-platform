@@ -106,3 +106,58 @@ def test_event_bodies_match_the_api(tmp_path: Path) -> None:
     body = json.loads(next(r for r in api.requests if r.url.path.endswith("/events")).content)
     assert set(body) == {"event_type", "location", "occurred_at"}
     assert body["occurred_at"].endswith("Z")
+
+
+class FlakyApi(FakeApi):
+    """Drops the connection on the first requests, then answers, as a port-forward does when a pod goes."""
+
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if self.failures > 0:
+            self.failures -= 1
+            raise httpx.ConnectError("connection refused", request=request)
+        return super().__call__(request)
+
+
+def test_a_request_is_tried_again_after_a_connection_error(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    async def no_wait(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+    api = FlakyApi(failures=5)
+    _, stats = go(tmp_path, api, shipments=3, concurrency=1, retry_seconds=30)
+    assert stats.shipments_failed == 0 and stats.shipments_created == 3
+    assert stats.events_rejected == 0
+
+
+def test_without_retry_a_connection_error_fails_the_shipment(tmp_path: Path) -> None:
+    api = FlakyApi(failures=2)
+    _, stats = go(tmp_path, api, shipments=3, concurrency=1)
+    assert stats.shipments_failed == 2 and stats.shipments_created == 1
+
+
+def test_a_retried_event_keeps_its_idempotency_key(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    async def no_wait(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+
+    class DropEventsOnce(FakeApi):
+        def __init__(self) -> None:
+            super().__init__()
+            self.dropped = False
+
+        def __call__(self, request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/events") and not self.dropped:
+                self.dropped = True
+                self.requests.append(request)
+                raise httpx.RemoteProtocolError("server disconnected", request=request)
+            return super().__call__(request)
+
+    api = DropEventsOnce()
+    go(tmp_path, api, shipments=1, concurrency=1, retry_seconds=30)
+    first_two = [r.headers["Idempotency-Key"] for r in api.requests if r.url.path.endswith("/events")][:2]
+    assert first_two[0] == first_two[1]

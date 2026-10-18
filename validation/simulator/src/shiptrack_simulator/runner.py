@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
@@ -41,6 +43,34 @@ class Stats:
         return "\n".join(lines)
 
 
+RETRY_STATUSES = frozenset({502, 503, 504})
+
+
+async def _post(
+    client: httpx.AsyncClient, url: str, *, retry_seconds: float, **kwargs: Any
+) -> httpx.Response:
+    """POST, and try again after a connection error or a 502, 503, or 504 for up to `retry_seconds`.
+
+    A client behind a load balancer or a port-forward sees these while pods are replaced. An event is sent
+    again with the same Idempotency-Key, which is what the key is for; a shipment create has no key, so a
+    retry after a dropped connection can leave one extra shipment, which does no harm. With 0 nothing is tried
+    again.
+    """
+    deadline = time.monotonic() + retry_seconds
+    wait = 0.5
+    while True:
+        try:
+            response = await client.post(url, **kwargs)
+        except httpx.TransportError:
+            if time.monotonic() >= deadline:
+                raise
+        else:
+            if response.status_code not in RETRY_STATUSES or time.monotonic() >= deadline:
+                return response
+        await asyncio.sleep(wait)
+        wait = min(wait * 2, 5.0)
+
+
 def headers_for(target: str, token: str) -> dict[str, str]:
     if target == "none":
         return {}
@@ -55,6 +85,7 @@ async def _send_event(
     run_id: str,
     shipment: dict[str, str],
     event: PlannedEvent,
+    retry_seconds: float,
 ) -> None:
     key = f"sim-{run_id}-{event.key_suffix}"
     if event.duplicate:
@@ -62,8 +93,10 @@ async def _send_event(
     if event.out_of_order:
         stats.out_of_order_sent += 1
     try:
-        response = await client.post(
+        response = await _post(
+            client,
             f"/api/v1/shipments/{shipment['id']}/events",
+            retry_seconds=retry_seconds,
             json={
                 "event_type": event.event_type,
                 "location": event.location,
@@ -101,10 +134,13 @@ async def _run_shipment(
     run_id: str,
     plan: ShipmentPlan,
     delay: float,
+    retry_seconds: float,
 ) -> None:
     try:
-        created = await client.post(
+        created = await _post(
+            client,
             "/api/v1/shipments",
+            retry_seconds=retry_seconds,
             json={
                 "carrier_code": plan.carrier_code,
                 "origin": plan.origin,
@@ -127,15 +163,20 @@ async def _run_shipment(
     stats.exception_paths += int(plan.exception_path)
 
     for event in plan.events:
-        await _send_event(client, ledger, stats, run_id=run_id, shipment=shipment, event=event)
+        await _send_event(
+            client, ledger, stats, run_id=run_id, shipment=shipment, event=event, retry_seconds=retry_seconds
+        )
         if delay:
             await asyncio.sleep(delay)
 
     if plan.delivers:
         content, content_type = make_proof_of_delivery(rng, f"{run_id}-{shipment['tracking_number']}")
         try:
-            proof = await client.post(
-                f"/api/v1/shipments/{shipment['id']}/pod", files={"file": ("proof", content, content_type)}
+            proof = await _post(
+                client,
+                f"/api/v1/shipments/{shipment['id']}/pod",
+                retry_seconds=retry_seconds,
+                files={"file": ("proof", content, content_type)},
             )
         except httpx.HTTPError as error:
             stats.proofs_failed += 1
@@ -158,6 +199,7 @@ async def run(
     concurrency: int = 10,
     delay: float = 0.0,
     seed: int = 0,
+    retry_seconds: float = 0.0,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> Stats:
     stats = Stats()
@@ -175,7 +217,16 @@ async def run(
 
         async def one(plan: ShipmentPlan) -> None:
             async with gate:
-                await _run_shipment(client, ledger, stats, rng, run_id=run_id, plan=plan, delay=delay)
+                await _run_shipment(
+                    client,
+                    ledger,
+                    stats,
+                    rng,
+                    run_id=run_id,
+                    plan=plan,
+                    delay=delay,
+                    retry_seconds=retry_seconds,
+                )
 
         await asyncio.gather(*(one(plan) for plan in plans))
     return stats
