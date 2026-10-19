@@ -1,0 +1,68 @@
+name: check-ui-urls
+
+# Prints the browser URLs of modern (the main address), legacy (the preview port), and Grafana (the Grafana
+# port), each only as ciphertext encrypted to an RSA public key made on the requester's machine, so the public
+# log never holds the load balancer's address (ADR-0037). shiptrack-modern-gcp's scripts/ui-access.sh makes the
+# key, dispatches this, and decrypts the lines. It reads one contract parameter with the plan role and changes
+# nothing, so it runs on `dev` without an environment, like check-drift.
+#
+# Output lines: `UI_URL <name> <base64 ciphertext>`, one per URL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_key:
+        description: "Base64 of an RSA public key in PEM form, made by scripts/ui-access.sh"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # The defaults of preview_port and grafana_port in terraform/envs/dev/variables.tf; terraform.tfvars does not
+  # override them.
+  PREVIEW_PORT: "8080"
+  GRAFANA_PORT: "3000"
+
+jobs:
+  urls:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Read the public key
+        env:
+          PUBLIC_KEY: ${{ inputs.public_key }}
+        run: |
+          if ! printf '%s' "$PUBLIC_KEY" | base64 -d >"$RUNNER_TEMP/key.pem" 2>/dev/null \
+            || ! openssl pkey -pubin -in "$RUNNER_TEMP/key.pem" -noout 2>/dev/null; then
+            echo "::error::public_key is not the base64 of a PEM public key"
+            exit 1
+          fi
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Encrypt the URLs
+        run: |
+          base_url=$(aws ssm get-parameter --name /shiptrack/platform/base_url --query Parameter.Value --output text)
+          host=${base_url#*://}
+          host=${host%%/*}
+          echo "::add-mask::$base_url"
+          echo "::add-mask::$host"
+          # The preview and Grafana listeners are plain HTTP whatever the main listener is (ADR-0026, ADR-0035).
+          encrypt() {
+            printf '%s' "$2" \
+              | openssl pkeyutl -encrypt -pubin -inkey "$RUNNER_TEMP/key.pem" \
+                -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+              | base64 -w0 | sed "s/^/UI_URL $1 /"
+            echo
+          }
+          encrypt modern "${base_url%/}/ui/"
+          encrypt legacy "http://${host}:${PREVIEW_PORT}/ui/"
+          encrypt grafana "http://${host}:${GRAFANA_PORT}/"
+          echo "The URLs are printed encrypted. scripts/ui-access.sh in shiptrack-modern-gcp decrypts them." >>"$GITHUB_STEP_SUMMARY"

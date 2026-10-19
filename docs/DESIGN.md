@@ -157,7 +157,8 @@ shiptrack-platform/
 │   │   ├── ci-terraform.yml
 │   │   ├── apply-terraform.yml
 │   │   ├── check-drift.yml
-│   │   └── check-live-stack.yml
+│   │   ├── check-live-stack.yml
+│   │   └── check-ui-urls.yml
 │   ├── dependabot.yml            # github-actions + uv
 │   └── CODEOWNERS                # .github/ and bootstrap/ (R-09)
 ├── .tflint.hcl  .checkov.yaml  .pre-commit-config.yaml  .gitleaks.toml  .gitignore
@@ -549,6 +550,7 @@ These tools own the **shared definition of correct** for both stacks.
   `bootstrap/` gets the same lint and scan steps but is never planned here; it is planned and applied only by `apply-bootstrap.yml` (§6.1).
 - **`apply-terraform.yml`** (push to `dev` that changes `terraform/**`, `scripts/reset-data.sh`, or `db/reset-data.sql`, which the reset document embeds): `environment: dev` (required reviewers), apply role, fresh `plan -out` then `apply` of that plan in the same job. `concurrency: { group: tf-platform-dev, cancel-in-progress: false }`.
 - **`check-drift.yml`** (nightly cron): `plan -detailed-exitcode`. Exit code 2 opens or updates the GitHub issue "Drift detected: platform/dev". This is how break-glass weight changes get caught.
+- **`check-ui-urls.yml`** (by hand): the plan role, read-only, no environment. Reads `base_url` from the contract and prints the modern, legacy (preview port), and Grafana URLs, each encrypted to an RSA public key given as an input, so the public log holds ciphertext only (ADR-0037).
 - **`ops-rollback-cutover.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Break-glass: legacy = 100, modern = 0 on every weighted rule and the default action, without a pull request (ADR-0028).
 - **`check-cutover-gates.yml`** and **`check-security-findings.yml`** (by hand): the plan role, read-only. The first judges gates G2 to G5 over an evidence window from CloudWatch; the second summarises Inspector and Security Hub findings by scope (modern, legacy, other) and fails on a fixable CRITICAL or HIGH in modern's resources (ADR-0029). Both print numbers and titles only (ADR-0028).
 - **`ops-unlock-state.yml`** (by hand): `environment: dev` (required reviewers), apply role, shares the `tf-platform-dev` concurrency group. Removes a stale state lock given its ID, and refuses a lock with another ID or one younger than 30 minutes (ADR-0025).

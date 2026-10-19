@@ -40,6 +40,7 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 | 0034 | `data-reset-by-gated-workflow` | Accepted |
 | 0035 | `grafana-on-the-preview-addresses` | Accepted |
 | 0036 | `proof-of-delivery-naming` | Accepted |
+| 0037 | `ui-urls-as-ciphertext` | Accepted |
 
 ## ADR-0001: security-hub-cspm-scope
 
@@ -487,3 +488,15 @@ Decisions are recorded here, oldest first. Each entry has a status (Planned, Acc
 **Decision:** A proof of delivery is the file a carrier uploads with `POST /api/v1/shipments/{id}/pod`, kept in the proof-of-delivery bucket under `pod/`. It is written "proof of delivery" in prose, comments, descriptions, and messages, and "proof-of-delivery" when it qualifies a noun. Code and test names say `proof_of_delivery`, including the contract suite's pytest marker and the simulator's module and counters. A pod, never abbreviated to POD, is only a Kubernetes pod: `pod restarts`, `pod-restarts` alarms, and `pods.eks.amazonaws.com` keep that meaning. Names that stored data, other repositories, or deployed resources depend on are kept: the `pod_bucket_name` and `pod_bucket_arn` contract keys and the module outputs behind them, the `<name_prefix>-pod-<account>-<region>` bucket and the `aws_s3_bucket.pod` resource addresses, the `pod/` key prefix, the `pod_retention_days` and `enable_pod_data_events` variables, the `podBucket` parameter of `ShipTrack-ResetData`, the `pod_documents` table the reset script deletes from, the `POD_DIR` test variable, and the gate id `G-POD`, which reads as the proof-of-delivery gate.
 
 **Consequences:** No behavior, state address, contract key, or workflow name changes. Two resources change in place: the description of the data KMS key, and the `ShipTrack-ResetData` document, whose embedded script has new usage text and the same behavior. The kept names still contain `pod`; in this repository `pod` means proof of delivery everywhere except in `pod-restarts`, pod restart gates, and Pod Identity, which are Kubernetes. The simulator's summary line now reads `proofs uploaded`.
+
+## ADR-0037: ui-urls-as-ciphertext
+
+**Status:** Accepted
+
+**Context:** The owner opens modern on the main address, legacy on the preview port, and Grafana on the Grafana port, and wants the URLs from a workflow, with no AWS CLI. The repository is public, so its logs and job summaries are public, and the load balancer's address must not appear in them (design §6.12). The owner's address also changes, and the preview and Grafana listeners admit only the `PREVIEW_CIDRS` secret's addresses (ADR-0026, ADR-0035), so a new address means a new secret and an apply. A one-off `check-base-url` workflow proved the approach once and was deleted.
+
+**Decision:**
+- `check-ui-urls.yml` reads `base_url` from the contract with the plan role and prints the three URLs, each encrypted with RSA-OAEP (SHA-256) to a public key given as an input. It changes nothing and runs on `dev` without an environment, like `check-drift`. The preview and Grafana ports are the defaults in `terraform/envs/dev/variables.tf`, written in the workflow.
+- `scripts/ui-access.sh` in `shiptrack-modern-gcp` drives it from the owner's machine. `open` reads the machine's public address and writes it to `PREVIEW_CIDRS` (and to the GCP allow-list). It then dispatches `apply-terraform`, this workflow, and the GCP one with a key it makes for the run, decrypts the lines, checks that each URL answers, and deletes the key. It refuses to dispatch the apply while the drift issue is open, so the apply holds only the address change.
+
+**Consequences:** The logs hold ciphertext that only the key made for that run can read, and the key never leaves the owner's machine. `open` replaces `PREVIEW_CIDRS` with the one current address, so a second address added by hand is dropped. The apply approves the plan it makes in the same job, and the drift check is the guard that nothing else is in it. An address change updates `preview["0"]` and `grafana["0"]` in place. If the ports change in `terraform.tfvars`, the workflow's values must change with them.
