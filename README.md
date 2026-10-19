@@ -179,6 +179,7 @@ observability, delivery) are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 | `ci-scrub.yml`, `ci-simulator.yml`, `ci-validation.yml` | On pull requests: secret and identifier scan; simulator and validation tooling checks |
 | `check-drift.yml` | Nightly plan; opens or updates one issue when the live stack drifts, and closes it when clean |
 | `check-live-stack.yml` | Runs the contract suite or a k6 baseline against one stack through the ALB |
+| `check-ui-urls.yml` | Prints the modern, legacy, and Grafana URLs encrypted to a key made on the owner's machine, which decrypts them |
 | `check-cutover-gates.yml` | Judges the cutover gates over a soak window from CloudWatch |
 | `check-security-findings.yml` | Inspector and Security Hub findings; fails on a fixable CRITICAL or HIGH in modern's resources |
 | `ops-rollback-cutover.yml` | Break-glass: all weighted routing back to legacy without a pull request |
