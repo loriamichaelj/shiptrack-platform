@@ -12,6 +12,7 @@ on:
       - "terraform/**"
       - "bootstrap/**"
       - "scripts/terraform-ci.sh"
+      - "scripts/terraform-destroy.sh"
       # The ShipTrack-ResetData document embeds these two files (terraform/modules/data_reset).
       - "scripts/reset-data.sh"
       - "db/reset-data.sql"

@@ -19,6 +19,8 @@ resource "aws_s3_bucket" "pod" {
   #checkov:skip=CKV2_AWS_62: event notifications are not needed for the proof-of-delivery bucket
   #checkov:skip=CKV_AWS_144: cross-region replication is out of scope (design §2, no multi-region DR)
   bucket = "${var.name_prefix}-pod-${local.suffix}"
+
+  force_destroy = var.force_destroy
 }
 
 resource "aws_s3_bucket_public_access_block" "pod" {
@@ -146,6 +148,8 @@ resource "aws_s3_bucket" "alb_logs" {
   #checkov:skip=CKV2_AWS_62: event notifications are not needed for a log bucket
   #checkov:skip=CKV_AWS_144: cross-region replication is out of scope (design §2, no multi-region DR)
   bucket = "${var.name_prefix}-alb-logs-${local.suffix}"
+
+  force_destroy = var.force_destroy
 }
 
 resource "aws_s3_bucket_public_access_block" "alb_logs" {
@@ -250,6 +254,8 @@ resource "aws_s3_bucket" "cloudtrail" {
   #checkov:skip=CKV2_AWS_62: event notifications are not needed for a log bucket
   #checkov:skip=CKV_AWS_144: cross-region replication is out of scope (design §2, no multi-region DR)
   bucket = "${var.name_prefix}-cloudtrail-${local.suffix}"
+
+  force_destroy = var.force_destroy
 }
 
 resource "aws_s3_bucket_public_access_block" "cloudtrail" {

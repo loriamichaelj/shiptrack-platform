@@ -30,3 +30,9 @@ variable "trail_name" {
   type        = string
   default     = "shiptrack-trail"
 }
+
+variable "force_destroy" {
+  description = "Let Terraform delete the buckets with every object and version in them. False except in the destroy-all workflow (ADR-0038)."
+  type        = bool
+  default     = false
+}

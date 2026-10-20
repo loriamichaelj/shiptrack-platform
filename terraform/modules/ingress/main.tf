@@ -26,7 +26,7 @@ resource "aws_lb" "this" {
   subnets                    = var.public_subnet_ids
   security_groups            = [var.alb_security_group_id]
   idle_timeout               = 60
-  enable_deletion_protection = true
+  enable_deletion_protection = var.deletion_protection
   drop_invalid_header_fields = true
   desync_mitigation_mode     = "defensive"
 
@@ -124,6 +124,8 @@ resource "aws_secretsmanager_secret" "test_token" {
   #checkov:skip=CKV2_AWS_57: the token is rotated by replacing the random_password resource (design §6.6)
   name       = "shiptrack/${var.environment}/test-routing-token"
   kms_key_id = var.secrets_key_arn
+
+  recovery_window_in_days = var.secret_recovery_window_days
 }
 
 resource "aws_secretsmanager_secret_version" "test_token" {
