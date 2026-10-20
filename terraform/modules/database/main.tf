@@ -113,9 +113,9 @@ resource "aws_db_instance" "this" {
 
   iam_database_authentication_enabled = true
   auto_minor_version_upgrade          = true
-  deletion_protection                 = true
-  skip_final_snapshot                 = false
-  final_snapshot_identifier           = "${local.identifier}-final"
+  deletion_protection                 = var.deletion_protection
+  skip_final_snapshot                 = var.skip_final_snapshot
+  final_snapshot_identifier           = var.skip_final_snapshot ? null : "${local.identifier}-final"
   copy_tags_to_snapshot               = true
   backup_retention_period             = var.backup_retention_days
   backup_window                       = var.backup_window
@@ -150,6 +150,8 @@ resource "aws_secretsmanager_secret" "db" {
 
   name       = each.value.name
   kms_key_id = var.secrets_key_arn
+
+  recovery_window_in_days = var.secret_recovery_window_days
 }
 
 resource "aws_secretsmanager_secret_version" "db" {

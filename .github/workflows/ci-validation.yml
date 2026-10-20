@@ -105,6 +105,8 @@ jobs:
         run: scripts/tests/test_ssm_run.sh
       - name: Test reset-data.sh against a fake aws and psql
         run: scripts/tests/test_reset_data.sh
+      - name: Test terraform-destroy.sh against fake aws and terraform
+        run: scripts/tests/test_terraform_destroy.sh
 
   database:
     runs-on: ubuntu-24.04

@@ -116,3 +116,26 @@ variable "max_connections" {
   type        = number
   default     = 400
 }
+
+variable "deletion_protection" {
+  description = "Refuse to delete the instance. True except in the destroy-all workflow (ADR-0038)."
+  type        = bool
+  default     = true
+}
+
+variable "skip_final_snapshot" {
+  description = "Delete the instance without a final snapshot. False except in the destroy-all workflow (ADR-0038)."
+  type        = bool
+  default     = false
+}
+
+variable "secret_recovery_window_days" {
+  description = "Days a deleted secret can be recovered, which also keeps its name from being used again. 30 is the Secrets Manager default; destroy-all sets 0 (ADR-0038)."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.secret_recovery_window_days == 0 || (var.secret_recovery_window_days >= 7 && var.secret_recovery_window_days <= 30)
+    error_message = "secret_recovery_window_days must be 0 or between 7 and 30."
+  }
+}

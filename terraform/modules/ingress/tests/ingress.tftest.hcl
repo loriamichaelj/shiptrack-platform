@@ -53,6 +53,11 @@ run "alb_follows_the_design" {
     ])
     error_message = "The ALB must match design §6.6."
   }
+
+  assert {
+    condition     = aws_secretsmanager_secret.test_token.recovery_window_in_days == 30
+    error_message = "A normal apply keeps the 30-day recovery window."
+  }
 }
 
 run "there_is_no_preview_listener_by_default" {

@@ -145,3 +145,20 @@ variable "api_stickiness_seconds" {
     error_message = "api_stickiness_seconds must be between 1 second and 7 days."
   }
 }
+
+variable "deletion_protection" {
+  description = "Refuse to delete the load balancer. True except in the destroy-all workflow (ADR-0038)."
+  type        = bool
+  default     = true
+}
+
+variable "secret_recovery_window_days" {
+  description = "Days the deleted test-routing token can be recovered. 30 is the Secrets Manager default; destroy-all sets 0 (ADR-0038)."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.secret_recovery_window_days == 0 || (var.secret_recovery_window_days >= 7 && var.secret_recovery_window_days <= 30)
+    error_message = "secret_recovery_window_days must be 0 or between 7 and 30."
+  }
+}

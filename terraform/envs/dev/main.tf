@@ -36,6 +36,10 @@ module "database" {
   max_connections       = var.db_max_connections
   allocated_storage     = var.db_allocated_storage
   max_allocated_storage = var.db_max_allocated_storage
+
+  deletion_protection         = var.deletion_protection
+  skip_final_snapshot         = var.skip_final_snapshot
+  secret_recovery_window_days = var.secret_recovery_window_days
 }
 
 module "storage" {
@@ -44,6 +48,7 @@ module "storage" {
   data_key_arn       = module.kms.data_key_arn
   logs_key_arn       = module.kms.logs_key_arn
   pod_retention_days = var.pod_retention_days
+  force_destroy      = var.force_destroy_buckets
 }
 
 module "ingress" {
@@ -64,6 +69,9 @@ module "ingress" {
   domain_name           = var.domain_name
   hosted_zone_name      = var.hosted_zone_name
   enable_waf            = var.enable_waf
+
+  deletion_protection         = var.deletion_protection
+  secret_recovery_window_days = var.secret_recovery_window_days
 }
 
 # --- Values owned by bootstrap, read by data source ---------------------------------------------

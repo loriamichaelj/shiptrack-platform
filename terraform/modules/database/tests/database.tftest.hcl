@@ -97,6 +97,15 @@ run "secrets_follow_the_design" {
   }
 
   assert {
+    condition = alltrue([
+      aws_secretsmanager_secret.db["app"].recovery_window_in_days == 30,
+      aws_secretsmanager_secret.db["migrator"].recovery_window_in_days == 30,
+      !aws_db_instance.this.skip_final_snapshot,
+    ])
+    error_message = "A normal apply keeps the 30-day recovery window and the final snapshot."
+  }
+
+  assert {
     condition     = aws_secretsmanager_secret_version.db["app"].secret_string_wo_version == 1
     error_message = "Secrets are written through the write-only argument, versioned by db_secret_version."
   }

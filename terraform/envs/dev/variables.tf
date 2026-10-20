@@ -220,3 +220,30 @@ variable "manage_access_analyzer" {
   type        = bool
   default     = false
 }
+
+# --- Taking the stack down (ADR-0038) --------------------------------------------------------------
+# The defaults protect. Only the destroy-all workflow sets them otherwise, for the destroy.
+
+variable "deletion_protection" {
+  description = "Refuse to delete the database instance and the load balancer."
+  type        = bool
+  default     = true
+}
+
+variable "skip_final_snapshot" {
+  description = "Delete the database instance without a final snapshot."
+  type        = bool
+  default     = false
+}
+
+variable "force_destroy_buckets" {
+  description = "Let Terraform delete the buckets with everything in them."
+  type        = bool
+  default     = false
+}
+
+variable "secret_recovery_window_days" {
+  description = "Days a deleted secret can be recovered: 30, or 0 to delete at once."
+  type        = number
+  default     = 30
+}

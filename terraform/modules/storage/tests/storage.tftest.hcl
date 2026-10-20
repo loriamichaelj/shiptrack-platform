@@ -30,6 +30,15 @@ run "bucket_names_follow_the_design" {
     ])
     error_message = "Buckets must be named shiptrack-<purpose>-<account>-<region>."
   }
+
+  assert {
+    condition = !anytrue([
+      aws_s3_bucket.pod.force_destroy,
+      aws_s3_bucket.alb_logs.force_destroy,
+      aws_s3_bucket.cloudtrail.force_destroy,
+    ])
+    error_message = "No bucket may be force-destroyed unless the destroy-all workflow asks for it."
+  }
 }
 
 run "every_bucket_is_locked_down" {
